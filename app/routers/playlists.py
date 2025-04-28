@@ -191,12 +191,11 @@ def update_playlist(
 
 
 @router.get("/video/{video_id}", response_model=List[PlaylistResponse])
+@router.get("/video/{video_id}", response_model=List[PlaylistResponse])
 def get_video_playlists(
     video_id: int,
     db: Session = Depends(get_db),
-    current_user: Optional[models.User] = Depends(
-        oauth2.get_current_active_user_optional
-    ),
+    current_user: Optional[models.User] = Depends(oauth2.get_current_user_optional),
 ):
     """Get all playlists containing a specific video"""
     # First check if the video exists
