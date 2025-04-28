@@ -314,3 +314,28 @@ def get_shared_playlist(share_token: str, db: Session = Depends(get_db)):
     playlist_data["videos"] = videos
 
     return playlist_data
+
+
+@router.get("/", response_model=List[schemas.PlaylistResponse])
+def get_public_playlists(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user_optional),
+):
+    """
+    Get all public playlists.
+    If user is authenticated, also include their private playlists.
+    """
+    # Base query for public playlists
+    query = db.query(models.VideoPlaylist).filter(
+        models.VideoPlaylist.is_public == True
+    )
+
+    # If user is authenticated, include their private playlists too
+    if current_user:
+        query = db.query(models.VideoPlaylist).filter(
+            (models.VideoPlaylist.is_public == True)
+            | (models.VideoPlaylist.creator_id == current_user.id)
+        )
+
+    playlists = query.all()
+    return playlists
