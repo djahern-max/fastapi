@@ -23,7 +23,12 @@ def create_playlist(
 
 
 @router.get("/{playlist_id}", response_model=PlaylistDetail)
-def get_playlist(playlist_id: int, db: Session = Depends(get_db)):
+@router.get("/{playlist_id}", response_model=PlaylistDetail)
+def get_playlist(
+    playlist_id: int,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(oauth2.get_current_user_optional),
+):
     # Get the playlist with eager loading of videos
     playlist = (
         db.query(models.VideoPlaylist)
@@ -34,6 +39,13 @@ def get_playlist(playlist_id: int, db: Session = Depends(get_db)):
     if not playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
 
+    # Check if playlist is private and user doesn't have access
+    if not playlist.is_public and (
+        not current_user or current_user.id != playlist.creator_id
+    ):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Rest of the function remains the same...
     # Count the videos explicitly
     video_count = (
         db.query(models.PlaylistVideo)
@@ -318,7 +330,7 @@ def get_shared_playlist(share_token: str, db: Session = Depends(get_db)):
 @router.get("/", response_model=List[schemas.PlaylistResponse])
 def get_public_playlists(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(oauth2.get_current_user_optional),
+    current_user: Optional[models.User] = Depends(oauth2.get_current_user_optional),
 ):
     """
     Get all public playlists.
@@ -337,4 +349,17 @@ def get_public_playlists(
         )
 
     playlists = query.all()
-    return playlists
+
+    # Add video count to each playlist
+    enhanced_playlists = []
+    for playlist in playlists:
+        playlist_dict = playlist.__dict__.copy()
+        video_count = (
+            db.query(models.PlaylistVideo)
+            .filter(models.PlaylistVideo.playlist_id == playlist.id)
+            .count()
+        )
+        playlist_dict["video_count"] = video_count
+        enhanced_playlists.append(playlist_dict)
+
+    return enhanced_playlists
