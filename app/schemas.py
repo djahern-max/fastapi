@@ -36,6 +36,7 @@ class VideoType(str, Enum):
     solution_demo = "solution_demo"
     progress_update = "progress_update"
     pitch_contest = "pitch_contest"
+    tutorials = "tutorials"
 
 
 class RequestPriority(str, Enum):
