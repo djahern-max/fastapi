@@ -925,3 +925,53 @@ async def get_ranked_showcases(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching ranked showcases: {str(e)}",
         )
+
+
+@router.delete("/{showcase_id}/link-video/{video_id}")
+async def unlink_video_from_showcase(
+    showcase_id: int,
+    video_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Unlink a specific video from a showcase."""
+    # Check if showcase exists and belongs to user
+    showcase = get_project_showcase(db, showcase_id)
+    if not showcase:
+        raise HTTPException(status_code=404, detail="Showcase not found")
+
+    if showcase.developer_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to update this showcase"
+        )
+
+    # Check if the video-showcase relationship exists
+    result = db.execute(
+        models.showcase_videos.select().where(
+            models.showcase_videos.c.showcase_id == showcase_id,
+            models.showcase_videos.c.video_id == video_id,
+        )
+    ).first()
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Video not found in showcase")
+
+    # Remove from showcase_videos table
+    db.execute(
+        models.showcase_videos.delete().where(
+            models.showcase_videos.c.showcase_id == showcase_id,
+            models.showcase_videos.c.video_id == video_id,
+        )
+    )
+
+    # Remove content link
+    db.query(models.ShowcaseContentLink).filter(
+        models.ShowcaseContentLink.showcase_id == showcase_id,
+        models.ShowcaseContentLink.content_type == "video",
+        models.ShowcaseContentLink.content_id == video_id,
+    ).delete()
+
+    # Commit changes
+    db.commit()
+
+    return {"message": "Video unlinked successfully"}

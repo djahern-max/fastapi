@@ -63,9 +63,12 @@ def display_videos(
     current_user: Optional[models.User] = Depends(oauth2.get_optional_user),
 ):
     try:
-
         # Get all videos
         videos = db.query(models.Video).all()
+
+        # If no videos exist, return empty lists immediately
+        if not videos:
+            return schemas.VideoResponse(user_videos=[], other_videos=[])
 
         # Process videos
         processed_videos = []
@@ -109,18 +112,18 @@ def display_videos(
                 processed_videos.append(video_out)
 
             except Exception as video_error:
-
+                # Log the error but continue processing other videos
                 continue
 
         return schemas.VideoResponse(
             user_videos=[],
-            other_videos=processed_videos,  # Or filter for user's videos if needed
+            other_videos=processed_videos,
         )
 
     except Exception as e:
-
-        logger.exception("Full traceback:")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Log the error and return an empty response instead of throwing 500
+        logger.exception(f"Error in display_videos: {str(e)}")
+        return schemas.VideoResponse(user_videos=[], other_videos=[])
 
 
 # Add a new endpoint for authenticated users to get their videos
