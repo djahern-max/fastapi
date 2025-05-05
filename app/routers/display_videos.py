@@ -63,14 +63,28 @@ def display_videos(
     current_user: Optional[models.User] = Depends(oauth2.get_optional_user),
 ):
     try:
-        # Get all videos
-        videos = db.query(models.Video).all()
+        # Try to query the Video table - if it doesn't exist yet, handle gracefully
+        try:
+            videos = db.query(models.Video).all()
+        except Exception as e:
+            # If table doesn't exist or other DB issue, return empty response
+            if "relation" in str(e) or "table" in str(e):
+                return schemas.VideoResponse(
+                    user_videos=[],
+                    other_videos=[],
+                )
+            else:
+                # Re-raise if it's not a missing table error
+                raise
 
-        # If no videos exist, return empty lists immediately
+        # Early return if no videos
         if not videos:
-            return schemas.VideoResponse(user_videos=[], other_videos=[])
+            return schemas.VideoResponse(
+                user_videos=[],
+                other_videos=[],
+            )
 
-        # Process videos
+        # Rest of your existing processing code...
         processed_videos = []
         for video in videos:
             try:
@@ -121,9 +135,12 @@ def display_videos(
         )
 
     except Exception as e:
-        # Log the error and return an empty response instead of throwing 500
-        logger.exception(f"Error in display_videos: {str(e)}")
-        return schemas.VideoResponse(user_videos=[], other_videos=[])
+        logger.exception("Error in display_videos endpoint:")
+        # Return empty arrays instead of 500 error for better UX with empty DB
+        return schemas.VideoResponse(
+            user_videos=[],
+            other_videos=[],
+        )
 
 
 # Add a new endpoint for authenticated users to get their videos
