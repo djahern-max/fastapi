@@ -320,6 +320,12 @@ class ClientProfileOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProfileCheckResponse(BaseModel):
+    has_profile: bool
+    profile_type: Optional[str] = None
+    profile_id: Optional[int] = None
+
+
 # ------------------ Token Schemas ------------------
 class TokenData(BaseModel):
     id: Optional[int] = None

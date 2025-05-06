@@ -446,3 +446,36 @@ def get_public_developers(db: Session = Depends(database.get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching public developers: {str(e)}",
         )
+
+
+@router.get("/check-profile", response_model=schemas.ProfileCheckResponse)
+def check_user_profile(
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Check if the current user has a profile"""
+    result = {"has_profile": False, "profile_type": None, "profile_id": None}
+
+    if current_user.user_type == models.UserType.developer:
+        profile = (
+            db.query(models.DeveloperProfile)
+            .filter(models.DeveloperProfile.user_id == current_user.id)
+            .first()
+        )
+        if profile:
+            result["has_profile"] = True
+            result["profile_type"] = "developer"
+            result["profile_id"] = profile.id
+
+    elif current_user.user_type == models.UserType.client:
+        profile = (
+            db.query(models.ClientProfile)
+            .filter(models.ClientProfile.user_id == current_user.id)
+            .first()
+        )
+        if profile:
+            result["has_profile"] = True
+            result["profile_type"] = "client"
+            result["profile_id"] = profile.id
+
+    return result
