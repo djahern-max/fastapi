@@ -742,3 +742,53 @@ def get_direct_data(
 
     except Exception as e:
         return {"error": str(e), "traceback": traceback.format_exc()}
+
+
+@router.get("/developer/minimal")
+def get_minimal_profile_data(
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Return minimal profile data to test response handling"""
+
+    # First get the profile to make sure it exists
+    profile = (
+        db.query(models.DeveloperProfile)
+        .filter(models.DeveloperProfile.user_id == current_user.id)
+        .first()
+    )
+
+    if not profile:
+        return {"error": "Profile not found"}
+
+    # Count the related entities directly with SQL
+    from sqlalchemy import text
+
+    work_count_query = (
+        "SELECT COUNT(*) FROM work_experiences WHERE developer_id = :profile_id"
+    )
+    edu_count_query = "SELECT COUNT(*) FROM educations WHERE developer_id = :profile_id"
+    cert_count_query = (
+        "SELECT COUNT(*) FROM certifications WHERE developer_id = :profile_id"
+    )
+    portfolio_count_query = (
+        "SELECT COUNT(*) FROM portfolio_items WHERE developer_id = :profile_id"
+    )
+
+    work_count = db.execute(text(work_count_query), {"profile_id": profile.id}).scalar()
+    edu_count = db.execute(text(edu_count_query), {"profile_id": profile.id}).scalar()
+    cert_count = db.execute(text(cert_count_query), {"profile_id": profile.id}).scalar()
+    portfolio_count = db.execute(
+        text(portfolio_count_query), {"profile_id": profile.id}
+    ).scalar()
+
+    # Return just the counts
+    return {
+        "profile_id": profile.id,
+        "counts": {
+            "work_experiences": work_count,
+            "educations": edu_count,
+            "certifications": cert_count,
+            "portfolio_items": portfolio_count,
+        },
+    }
