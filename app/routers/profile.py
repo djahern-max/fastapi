@@ -104,7 +104,7 @@ def get_profile(
     }
 
 
-@router.get("/developer", response_model=schemas.DeveloperProfileOut)
+@router.get("/developer")  # Remove response_model to build response manually
 def get_developer_profile(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(database.get_db),
@@ -139,7 +139,106 @@ def get_developer_profile(
             },
         )
 
-    return profile
+    # Manually serialize the profile and its related data
+    result = {
+        "id": profile.id,
+        "user_id": profile.user_id,
+        "skills": profile.skills,
+        "experience_years": profile.experience_years,
+        "bio": profile.bio,
+        "is_public": profile.is_public,
+        "profile_image_url": profile.profile_image_url,
+        "rating": profile.rating,
+        "total_projects": profile.total_projects,
+        "success_rate": profile.success_rate,
+        "created_at": profile.created_at,
+        "city": profile.city,
+        "state": profile.state,
+        "zip_code": profile.zip_code,
+        "phone": profile.phone,
+        "contact_email": profile.contact_email,
+        "social_links": profile.social_links,
+        "professional_title": profile.professional_title,
+        "ratings": [],
+        "average_rating": None,
+        "work_experiences": [],
+        "educations": [],
+        "certifications": [],
+        "portfolio_items": [],
+    }
+
+    # Add work experiences
+    if profile.work_experiences:
+        for exp in profile.work_experiences:
+            result["work_experiences"].append(
+                {
+                    "id": exp.id,
+                    "developer_id": exp.developer_id,
+                    "company": exp.company,
+                    "position": exp.position,
+                    "start_date": exp.start_date,
+                    "end_date": exp.end_date,
+                    "is_current": exp.is_current,
+                    "location": exp.location,
+                    "description": exp.description,
+                    "responsibilities": exp.responsibilities,
+                    "date_range": getattr(exp, "date_range", None),
+                }
+            )
+
+    # Add educations
+    if profile.educations:
+        for edu in profile.educations:
+            result["educations"].append(
+                {
+                    "id": edu.id,
+                    "developer_id": edu.developer_id,
+                    "degree": edu.degree,
+                    "institution": edu.institution,
+                    "start_date": edu.start_date,
+                    "end_date": edu.end_date,
+                    "location": edu.location,
+                    "description": edu.description,
+                    "date_range": getattr(edu, "date_range", None),
+                }
+            )
+
+    # Add certifications
+    if profile.certifications:
+        for cert in profile.certifications:
+            result["certifications"].append(
+                {
+                    "id": cert.id,
+                    "developer_id": cert.developer_id,
+                    "name": cert.name,
+                    "issuing_organization": cert.issuing_organization,
+                    "issue_date": cert.issue_date,
+                    "expiration_date": cert.expiration_date,
+                    "credential_id": cert.credential_id,
+                    "credential_url": cert.credential_url,
+                    "date_range": getattr(cert, "date_range", None),
+                }
+            )
+
+    # Add portfolio items
+    if profile.portfolio_items:
+        for item in profile.portfolio_items:
+            result["portfolio_items"].append(
+                {
+                    "id": item.id,
+                    "developer_id": item.developer_id,
+                    "title": item.title,
+                    "description": item.description,
+                    "technologies": item.technologies,
+                    "image_url": item.image_url,
+                    "project_url": item.project_url,
+                    "repository_url": item.repository_url,
+                    "completion_date": item.completion_date,
+                    "is_featured": item.is_featured,
+                }
+            )
+
+    return result
 
 
 @router.get("/client", response_model=schemas.ClientProfileOut)
