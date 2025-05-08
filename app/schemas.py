@@ -230,6 +230,169 @@ class RatingResponse(BaseModel):
 
 
 # ------------------ Profile Schemas ------------------
+
+
+# Work Experience Schemas
+class WorkExperienceBase(BaseModel):
+    company: str
+    position: str
+    start_date: datetime
+    end_date: Optional[datetime] = None
+    is_current: bool = False
+    location: Optional[str] = None
+    description: Optional[str] = None
+    responsibilities: Optional[List[str]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkExperienceCreate(WorkExperienceBase):
+    developer_id: int
+
+
+class WorkExperienceUpdate(BaseModel):
+    company: Optional[str] = None
+    position: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    is_current: Optional[bool] = None
+    location: Optional[str] = None
+    description: Optional[str] = None
+    responsibilities: Optional[List[str]] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkExperienceOut(WorkExperienceBase):
+    id: int
+    developer_id: int
+    date_range: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Education Schemas
+class EducationBase(BaseModel):
+    degree: str
+    institution: str
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    location: Optional[str] = None
+    description: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EducationCreate(EducationBase):
+    developer_id: int
+
+
+class EducationUpdate(BaseModel):
+    degree: Optional[str] = None
+    institution: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    location: Optional[str] = None
+    description: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EducationOut(EducationBase):
+    id: int
+    developer_id: int
+    date_range: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Certification Schemas
+class CertificationBase(BaseModel):
+    name: str
+    issuing_organization: Optional[str] = None
+    issue_date: Optional[datetime] = None
+    expiration_date: Optional[datetime] = None
+    credential_id: Optional[str] = None
+    credential_url: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CertificationCreate(CertificationBase):
+    developer_id: int
+
+
+class CertificationUpdate(BaseModel):
+    name: Optional[str] = None
+    issuing_organization: Optional[str] = None
+    issue_date: Optional[datetime] = None
+    expiration_date: Optional[datetime] = None
+    credential_id: Optional[str] = None
+    credential_url: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CertificationOut(CertificationBase):
+    id: int
+    developer_id: int
+    date_range: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Portfolio Item Schemas
+class PortfolioItemBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    technologies: Optional[List[str]] = None
+    image_url: Optional[str] = None
+    project_url: Optional[str] = None
+    repository_url: Optional[str] = None
+    completion_date: Optional[datetime] = None
+    is_featured: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PortfolioItemCreate(PortfolioItemBase):
+    developer_id: int
+
+
+class PortfolioItemUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    technologies: Optional[List[str]] = None
+    image_url: Optional[str] = None
+    project_url: Optional[str] = None
+    repository_url: Optional[str] = None
+    completion_date: Optional[datetime] = None
+    is_featured: Optional[bool] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PortfolioItemOut(PortfolioItemBase):
+    id: int
+    developer_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Enhanced Developer Profile Schemas
+class SocialLinks(BaseModel):
+    linkedin: Optional[str] = None
+    github: Optional[str] = None
+    twitter: Optional[str] = None
+    website: Optional[str] = None
+
+    @field_validator("linkedin", "github", "twitter", "website")
+    def validate_url(cls, v, values, **kwargs):
+        if v is not None and not v.startswith(("http://", "https://")):
+            return f"https://{v}"
+        return v
+
+
 # First define the nested models
 class SocialLink(BaseModel):
     platform: str
@@ -249,6 +412,15 @@ class DeveloperProfileCreate(BaseModel):
     experience_years: int = Field(ge=0)
     bio: Optional[str] = None
     is_public: bool = False
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    phone: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
+    social_links: Optional[SocialLinks] = None
+    professional_title: Optional[str] = "Software Developer"
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClientProfileCreate(BaseModel):
@@ -265,6 +437,15 @@ class DeveloperProfileUpdate(BaseModel):
     is_public: Optional[bool] = None
     profile_image_url: Optional[str] = None
     total_projects: Optional[int] = Field(None, ge=0)
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    phone: Optional[str] = None
+    contact_email: Optional[EmailStr] = None
+    social_links: Optional[SocialLinks] = None
+    professional_title: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DeveloperProfilePublic(BaseModel):
@@ -279,6 +460,16 @@ class DeveloperProfilePublic(BaseModel):
     total_projects: int
     success_rate: float
     created_at: datetime
+    professional_title: Optional[str] = "Software Developer"
+    city: Optional[str] = None
+    state: Optional[str] = None
+    social_links: Optional[Dict[str, str]] = None
+
+    # Include related data
+    work_experiences: Optional[List[WorkExperienceOut]] = []
+    educations: Optional[List[EducationOut]] = []
+    certifications: Optional[List[CertificationOut]] = []
+    portfolio_items: Optional[List[PortfolioItemOut]] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -302,10 +493,23 @@ class DeveloperProfileOut(BaseModel):
     total_projects: int
     success_rate: float
     created_at: datetime
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    phone: Optional[str] = None
+    contact_email: Optional[str] = None
+    social_links: Optional[Dict[str, str]] = None
+    professional_title: Optional[str] = "Software Developer"
 
-    model_config = ConfigDict(from_attributes=True)
+    # Include related data
     ratings: Optional[List[DeveloperRatingOut]] = None
     average_rating: Optional[float] = Field(None, ge=0, le=5)
+    work_experiences: Optional[List[WorkExperienceOut]] = []
+    educations: Optional[List[EducationOut]] = []
+    certifications: Optional[List[CertificationOut]] = []
+    portfolio_items: Optional[List[PortfolioItemOut]] = []
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClientProfileOut(BaseModel):

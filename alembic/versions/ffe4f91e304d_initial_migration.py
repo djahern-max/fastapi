@@ -1,8 +1,8 @@
 """Initial migration
 
-Revision ID: 3e576ff45d36
+Revision ID: ffe4f91e304d
 Revises: 
-Create Date: 2025-04-22 22:30:32.549210
+Create Date: 2025-05-08 08:18:07.086818
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = '3e576ff45d36'
+revision: str = 'ffe4f91e304d'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -105,8 +105,15 @@ def upgrade() -> None:
     sa.Column('experience_years', sa.Integer(), nullable=True),
     sa.Column('bio', sa.Text(), nullable=True),
     sa.Column('created_at', sa.TIMESTAMP(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('city', sa.String(), nullable=True),
+    sa.Column('state', sa.String(), nullable=True),
+    sa.Column('zip_code', sa.String(), nullable=True),
+    sa.Column('phone', sa.String(), nullable=True),
+    sa.Column('contact_email', sa.String(), nullable=True),
+    sa.Column('social_links', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
     sa.Column('is_public', sa.Boolean(), nullable=True),
     sa.Column('profile_image_url', sa.String(), nullable=True),
+    sa.Column('professional_title', sa.String(), nullable=True),
     sa.Column('rating', sa.Float(), nullable=True),
     sa.Column('total_projects', sa.Integer(), nullable=True),
     sa.Column('success_rate', sa.Float(), nullable=True),
@@ -193,6 +200,19 @@ def upgrade() -> None:
     sa.UniqueConstraint('share_token')
     )
     op.create_index(op.f('ix_video_playlists_id'), 'video_playlists', ['id'], unique=False)
+    op.create_table('certifications',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('developer_id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(), nullable=False),
+    sa.Column('issuing_organization', sa.String(), nullable=True),
+    sa.Column('issue_date', sa.DateTime(), nullable=True),
+    sa.Column('expiration_date', sa.DateTime(), nullable=True),
+    sa.Column('credential_id', sa.String(), nullable=True),
+    sa.Column('credential_url', sa.String(), nullable=True),
+    sa.ForeignKeyConstraint(['developer_id'], ['developer_profiles.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_certifications_id'), 'certifications', ['id'], unique=False)
     op.create_table('collaboration_messages',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('session_id', sa.Integer(), nullable=True),
@@ -223,6 +243,34 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_developer_ratings_developer_id'), 'developer_ratings', ['developer_id'], unique=False)
     op.create_index(op.f('ix_developer_ratings_user_id'), 'developer_ratings', ['user_id'], unique=False)
+    op.create_table('educations',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('developer_id', sa.Integer(), nullable=False),
+    sa.Column('degree', sa.String(), nullable=False),
+    sa.Column('institution', sa.String(), nullable=False),
+    sa.Column('start_date', sa.DateTime(), nullable=True),
+    sa.Column('end_date', sa.DateTime(), nullable=True),
+    sa.Column('location', sa.String(), nullable=True),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.ForeignKeyConstraint(['developer_id'], ['developer_profiles.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_educations_id'), 'educations', ['id'], unique=False)
+    op.create_table('portfolio_items',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('developer_id', sa.Integer(), nullable=False),
+    sa.Column('title', sa.String(), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('technologies', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('image_url', sa.String(), nullable=True),
+    sa.Column('project_url', sa.String(), nullable=True),
+    sa.Column('repository_url', sa.String(), nullable=True),
+    sa.Column('completion_date', sa.DateTime(), nullable=True),
+    sa.Column('is_featured', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['developer_id'], ['developer_profiles.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_portfolio_items_id'), 'portfolio_items', ['id'], unique=False)
     op.create_table('requests',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('title', sa.String(), nullable=False),
@@ -269,6 +317,21 @@ def upgrade() -> None:
     sa.UniqueConstraint('share_token')
     )
     op.create_index(op.f('ix_showcases_id'), 'showcases', ['id'], unique=False)
+    op.create_table('work_experiences',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('developer_id', sa.Integer(), nullable=False),
+    sa.Column('company', sa.String(), nullable=False),
+    sa.Column('position', sa.String(), nullable=False),
+    sa.Column('start_date', sa.DateTime(), nullable=False),
+    sa.Column('end_date', sa.DateTime(), nullable=True),
+    sa.Column('is_current', sa.Boolean(), nullable=True),
+    sa.Column('location', sa.String(), nullable=True),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('responsibilities', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.ForeignKeyConstraint(['developer_id'], ['developer_profiles.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_work_experiences_id'), 'work_experiences', ['id'], unique=False)
     op.create_table('collaboration_attachments',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('message_id', sa.Integer(), nullable=True),
@@ -372,7 +435,7 @@ def upgrade() -> None:
     sa.Column('project_id', sa.Integer(), nullable=True),
     sa.Column('request_id', sa.Integer(), nullable=True),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('video_type', sa.Enum('project_overview', 'solution_demo', 'progress_update', name='videotype'), nullable=False),
+    sa.Column('video_type', sa.Enum('project_overview', 'solution_demo', 'progress_update', 'pitch_contest', 'tutorials', name='videotype'), nullable=False),
     sa.Column('share_token', sa.String(), nullable=True),
     sa.Column('project_url', sa.String(), nullable=True),
     sa.Column('is_public', sa.Boolean(), nullable=True),
@@ -496,15 +559,23 @@ def downgrade() -> None:
     op.drop_table('conversations')
     op.drop_index(op.f('ix_collaboration_attachments_id'), table_name='collaboration_attachments')
     op.drop_table('collaboration_attachments')
+    op.drop_index(op.f('ix_work_experiences_id'), table_name='work_experiences')
+    op.drop_table('work_experiences')
     op.drop_index(op.f('ix_showcases_id'), table_name='showcases')
     op.drop_table('showcases')
     op.drop_index(op.f('ix_requests_id'), table_name='requests')
     op.drop_table('requests')
+    op.drop_index(op.f('ix_portfolio_items_id'), table_name='portfolio_items')
+    op.drop_table('portfolio_items')
+    op.drop_index(op.f('ix_educations_id'), table_name='educations')
+    op.drop_table('educations')
     op.drop_index(op.f('ix_developer_ratings_user_id'), table_name='developer_ratings')
     op.drop_index(op.f('ix_developer_ratings_developer_id'), table_name='developer_ratings')
     op.drop_table('developer_ratings')
     op.drop_index(op.f('ix_collaboration_messages_id'), table_name='collaboration_messages')
     op.drop_table('collaboration_messages')
+    op.drop_index(op.f('ix_certifications_id'), table_name='certifications')
+    op.drop_table('certifications')
     op.drop_index(op.f('ix_video_playlists_id'), table_name='video_playlists')
     op.drop_table('video_playlists')
     op.drop_index(op.f('ix_user_tokens_id'), table_name='user_tokens')

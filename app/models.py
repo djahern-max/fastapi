@@ -451,6 +451,8 @@ class DeveloperProfile(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+
+    # Basic Information
     skills = Column(String)
     experience_years = Column(Integer)
     bio = Column(Text, nullable=True)
@@ -458,19 +460,157 @@ class DeveloperProfile(Base):
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
 
+    # Location Information
+    city = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+    zip_code = Column(String, nullable=True)
+
+    # Contact Information
+    phone = Column(String, nullable=True)
+    contact_email = Column(String, nullable=True)  # Separate from user.email
+
+    # Social Links - Store as JSON
+    social_links = Column(JSONB, nullable=True)  # {linkedin: url, github: url, etc}
+
     # Profile visibility and display
     is_public = Column(Boolean, default=False)
     profile_image_url = Column(String, nullable=True)
+
+    # Professional Title
+    professional_title = Column(String, nullable=True, default="Software Developer")
 
     # Success metrics
     rating = Column(Float, nullable=True)  # Average rating from clients
     total_projects = Column(Integer, default=0)
     success_rate = Column(Float, default=0.0)  # Percentage of successful projects
 
-    # Relationship
+    # Relationships
     user = relationship("User", back_populates="developer_profile")
-
     ratings = relationship("DeveloperRating", back_populates="developer")
+    work_experiences = relationship(
+        "WorkExperience", back_populates="developer", cascade="all, delete-orphan"
+    )
+    educations = relationship(
+        "Education", back_populates="developer", cascade="all, delete-orphan"
+    )
+    certifications = relationship(
+        "Certification", back_populates="developer", cascade="all, delete-orphan"
+    )
+    portfolio_items = relationship(
+        "PortfolioItem", back_populates="developer", cascade="all, delete-orphan"
+    )
+
+
+class WorkExperience(Base):
+    __tablename__ = "work_experiences"
+
+    id = Column(Integer, primary_key=True, index=True)
+    developer_id = Column(
+        Integer, ForeignKey("developer_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    company = Column(String, nullable=False)
+    position = Column(String, nullable=False)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=True)  # Null for current positions
+    is_current = Column(Boolean, default=False)
+    location = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+
+    # Store responsibilities as JSONB array for flexibility
+    responsibilities = Column(JSONB, nullable=True)
+
+    # Relationship
+    developer = relationship("DeveloperProfile", back_populates="work_experiences")
+
+    @hybrid_property
+    def date_range(self):
+        """Format date range string for the experience"""
+        start = self.start_date.strftime("%B %Y")
+        if self.is_current:
+            return f"{start} to Present"
+        elif self.end_date:
+            end = self.end_date.strftime("%B %Y")
+            return f"{start} to {end}"
+        return start
+
+
+# Education
+class Education(Base):
+    __tablename__ = "educations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    developer_id = Column(
+        Integer, ForeignKey("developer_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    degree = Column(String, nullable=False)
+    institution = Column(String, nullable=False)
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    location = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+
+    # Relationship
+    developer = relationship("DeveloperProfile", back_populates="educations")
+
+    @hybrid_property
+    def date_range(self):
+        """Format date range for education"""
+        if self.start_date and self.end_date:
+            start = self.start_date.strftime("%Y")
+            end = self.end_date.strftime("%Y")
+            return f"{start}-{end}"
+        return None
+
+
+# Certifications
+class Certification(Base):
+    __tablename__ = "certifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    developer_id = Column(
+        Integer, ForeignKey("developer_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    name = Column(String, nullable=False)
+    issuing_organization = Column(String, nullable=True)
+    issue_date = Column(DateTime, nullable=True)
+    expiration_date = Column(DateTime, nullable=True)
+    credential_id = Column(String, nullable=True)
+    credential_url = Column(String, nullable=True)
+
+    # Relationship
+    developer = relationship("DeveloperProfile", back_populates="certifications")
+
+    @hybrid_property
+    def date_range(self):
+        """Format date range for certification"""
+        if self.issue_date:
+            start = self.issue_date.strftime("%B %Y")
+            if self.expiration_date:
+                end = self.expiration_date.strftime("%B %Y")
+                return f"{start} to {end}"
+            return f"Issued {start}"
+        return None
+
+
+# Portfolio Items (Projects)
+class PortfolioItem(Base):
+    __tablename__ = "portfolio_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    developer_id = Column(
+        Integer, ForeignKey("developer_profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    technologies = Column(JSONB, nullable=True)  # Store as array of tech used
+    image_url = Column(String, nullable=True)
+    project_url = Column(String, nullable=True)
+    repository_url = Column(String, nullable=True)
+    completion_date = Column(DateTime, nullable=True)
+    is_featured = Column(Boolean, default=False)
+
+    # Relationship
+    developer = relationship("DeveloperProfile", back_populates="portfolio_items")
 
 
 class ClientProfile(Base):
