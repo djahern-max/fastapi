@@ -104,7 +104,7 @@ def get_profile(
     }
 
 
-@router.get("/developer")  # Remove response_model to build response manually
+@router.get("/developer")
 def get_developer_profile(
     current_user: models.User = Depends(oauth2.get_current_user),
     db: Session = Depends(database.get_db),
@@ -116,14 +116,14 @@ def get_developer_profile(
             content={"message": "Only developers can access developer profiles."},
         )
 
-    # First get the basic profile
-    profile_basic = (
+    # First get the profile to make sure it exists
+    profile = (
         db.query(models.DeveloperProfile)
         .filter(models.DeveloperProfile.user_id == current_user.id)
         .first()
     )
 
-    if not profile_basic:
+    if not profile:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
             content={
@@ -132,47 +132,64 @@ def get_developer_profile(
             },
         )
 
-    # Now that we have the profile ID, query again with eager loading
-    profile = (
-        db.query(models.DeveloperProfile)
-        .filter(models.DeveloperProfile.id == profile_basic.id)
-        .options(
-            joinedload(models.DeveloperProfile.work_experiences),
-            joinedload(models.DeveloperProfile.educations),
-            joinedload(models.DeveloperProfile.certifications),
-            joinedload(models.DeveloperProfile.portfolio_items),
-            joinedload(models.DeveloperProfile.ratings),
-        )
-        .first()
-    )
+    # Use raw SQL to get profile with related data
+    from sqlalchemy import text
+    import json
 
-    # Add logging to see what's happening
-    print(f"Profile ID: {profile.id}")
-    print(f"Work Experiences: {len(profile.work_experiences)}")
-    print(f"Educations: {len(profile.educations)}")
-    print(f"Certifications: {len(profile.certifications)}")
-    print(f"Portfolio Items: {len(profile.portfolio_items)}")
+    # Basic profile query
+    profile_query = """
+        SELECT * FROM developer_profiles WHERE id = :profile_id
+    """
+    profile_result = db.execute(
+        text(profile_query), {"profile_id": profile.id}
+    ).fetchone()
 
-    # Manually serialize the profile and its related data
+    # Work experiences query
+    work_exp_query = """
+        SELECT * FROM work_experiences WHERE developer_id = :profile_id
+    """
+    work_exps = db.execute(text(work_exp_query), {"profile_id": profile.id}).fetchall()
+
+    # Education query
+    edu_query = """
+        SELECT * FROM educations WHERE developer_id = :profile_id
+    """
+    educations = db.execute(text(edu_query), {"profile_id": profile.id}).fetchall()
+
+    # Certification query
+    cert_query = """
+        SELECT * FROM certifications WHERE developer_id = :profile_id
+    """
+    certifications = db.execute(text(cert_query), {"profile_id": profile.id}).fetchall()
+
+    # Portfolio items query
+    portfolio_query = """
+        SELECT * FROM portfolio_items WHERE developer_id = :profile_id
+    """
+    portfolio_items = db.execute(
+        text(portfolio_query), {"profile_id": profile.id}
+    ).fetchall()
+
+    # Construct the response manually
     result = {
-        "id": profile.id,
-        "user_id": profile.user_id,
-        "skills": profile.skills,
-        "experience_years": profile.experience_years,
-        "bio": profile.bio,
-        "is_public": profile.is_public,
-        "profile_image_url": profile.profile_image_url,
-        "rating": profile.rating,
-        "total_projects": profile.total_projects,
-        "success_rate": profile.success_rate,
-        "created_at": profile.created_at,
-        "city": profile.city,
-        "state": profile.state,
-        "zip_code": profile.zip_code,
-        "phone": profile.phone,
-        "contact_email": profile.contact_email,
-        "social_links": profile.social_links,
-        "professional_title": profile.professional_title,
+        "id": profile_result.id,
+        "user_id": profile_result.user_id,
+        "skills": profile_result.skills,
+        "experience_years": profile_result.experience_years,
+        "bio": profile_result.bio,
+        "is_public": profile_result.is_public,
+        "profile_image_url": profile_result.profile_image_url,
+        "rating": profile_result.rating,
+        "total_projects": profile_result.total_projects,
+        "success_rate": profile_result.success_rate,
+        "created_at": profile_result.created_at,
+        "city": profile_result.city,
+        "state": profile_result.state,
+        "zip_code": profile_result.zip_code,
+        "phone": profile_result.phone,
+        "contact_email": profile_result.contact_email,
+        "social_links": profile_result.social_links,
+        "professional_title": profile_result.professional_title,
         "ratings": [],
         "average_rating": None,
         "work_experiences": [],
@@ -182,75 +199,75 @@ def get_developer_profile(
     }
 
     # Add work experiences
-    if profile.work_experiences:
-        for exp in profile.work_experiences:
-            result["work_experiences"].append(
-                {
-                    "id": exp.id,
-                    "developer_id": exp.developer_id,
-                    "company": exp.company,
-                    "position": exp.position,
-                    "start_date": exp.start_date,
-                    "end_date": exp.end_date,
-                    "is_current": exp.is_current,
-                    "location": exp.location,
-                    "description": exp.description,
-                    "responsibilities": exp.responsibilities,
-                    "date_range": getattr(exp, "date_range", None),
-                }
-            )
+    for exp in work_exps:
+        result["work_experiences"].append(
+            {
+                "id": exp.id,
+                "developer_id": exp.developer_id,
+                "company": exp.company,
+                "position": exp.position,
+                "start_date": exp.start_date,
+                "end_date": exp.end_date,
+                "is_current": exp.is_current,
+                "location": exp.location,
+                "description": exp.description,
+                "responsibilities": exp.responsibilities,
+            }
+        )
 
     # Add educations
-    if profile.educations:
-        for edu in profile.educations:
-            result["educations"].append(
-                {
-                    "id": edu.id,
-                    "developer_id": edu.developer_id,
-                    "degree": edu.degree,
-                    "institution": edu.institution,
-                    "start_date": edu.start_date,
-                    "end_date": edu.end_date,
-                    "location": edu.location,
-                    "description": edu.description,
-                    "date_range": getattr(edu, "date_range", None),
-                }
-            )
+    for edu in educations:
+        result["educations"].append(
+            {
+                "id": edu.id,
+                "developer_id": edu.developer_id,
+                "degree": edu.degree,
+                "institution": edu.institution,
+                "start_date": edu.start_date,
+                "end_date": edu.end_date,
+                "location": edu.location,
+                "description": edu.description,
+            }
+        )
 
     # Add certifications
-    if profile.certifications:
-        for cert in profile.certifications:
-            result["certifications"].append(
-                {
-                    "id": cert.id,
-                    "developer_id": cert.developer_id,
-                    "name": cert.name,
-                    "issuing_organization": cert.issuing_organization,
-                    "issue_date": cert.issue_date,
-                    "expiration_date": cert.expiration_date,
-                    "credential_id": cert.credential_id,
-                    "credential_url": cert.credential_url,
-                    "date_range": getattr(cert, "date_range", None),
-                }
-            )
+    for cert in certifications:
+        result["certifications"].append(
+            {
+                "id": cert.id,
+                "developer_id": cert.developer_id,
+                "name": cert.name,
+                "issuing_organization": cert.issuing_organization,
+                "issue_date": cert.issue_date,
+                "expiration_date": cert.expiration_date,
+                "credential_id": cert.credential_id,
+                "credential_url": cert.credential_url,
+            }
+        )
 
     # Add portfolio items
-    if profile.portfolio_items:
-        for item in profile.portfolio_items:
-            result["portfolio_items"].append(
-                {
-                    "id": item.id,
-                    "developer_id": item.developer_id,
-                    "title": item.title,
-                    "description": item.description,
-                    "technologies": item.technologies,
-                    "image_url": item.image_url,
-                    "project_url": item.project_url,
-                    "repository_url": item.repository_url,
-                    "completion_date": item.completion_date,
-                    "is_featured": item.is_featured,
-                }
-            )
+    for item in portfolio_items:
+        result["portfolio_items"].append(
+            {
+                "id": item.id,
+                "developer_id": item.developer_id,
+                "title": item.title,
+                "description": item.description,
+                "technologies": item.technologies,
+                "image_url": item.image_url,
+                "project_url": item.project_url,
+                "repository_url": item.repository_url,
+                "completion_date": item.completion_date,
+                "is_featured": item.is_featured,
+            }
+        )
+
+    # Print counts for debugging
+    print(f"Profile ID: {profile.id}")
+    print(f"Work Experiences: {len(result['work_experiences'])}")
+    print(f"Educations: {len(result['educations'])}")
+    print(f"Certifications: {len(result['certifications'])}")
+    print(f"Portfolio Items: {len(result['portfolio_items'])}")
 
     return result
 
