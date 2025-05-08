@@ -11,6 +11,7 @@ import logging
 from ..oauth2 import get_current_user
 from sqlalchemy.orm import joinedload
 from fastapi.responses import JSONResponse
+import traceback
 
 
 # Initialize logger
@@ -625,3 +626,119 @@ def check_user_profile(
             result["profile_id"] = profile.id
 
     return result
+
+
+@router.get("/developer/direct-data")
+def get_direct_data(
+    current_user: models.User = Depends(oauth2.get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Special endpoint to get direct data from database bypassing ORM"""
+    if current_user.user_type != models.UserType.developer:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"message": "Only developers can access this endpoint."},
+        )
+
+    # Import necessary modules
+    import psycopg2
+    import os
+    import json
+    from psycopg2.extras import RealDictCursor
+    from datetime import datetime
+
+    # Define a function to convert non-serializable objects to strings
+    def json_serializable(obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return str(obj)
+
+    try:
+        # Get database credentials
+        DB_HOST = os.getenv("database_hostname")
+        DB_PORT = os.getenv("database_port")
+        DB_NAME = os.getenv("database_name")
+        DB_USER = os.getenv("database_username")
+        DB_PASS = os.getenv("database_password")
+
+        # Connect directly to PostgreSQL
+        conn = psycopg2.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            dbname=DB_NAME,
+            user=DB_USER,
+            password=DB_PASS,
+            cursor_factory=RealDictCursor,
+        )
+
+        # Get the developer profile ID
+        profile_id = None
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM developer_profiles WHERE user_id = %s",
+                (current_user.id,),
+            )
+            profile_row = cur.fetchone()
+            if profile_row:
+                profile_id = profile_row["id"]
+
+        if not profile_id:
+            return {"error": "Profile not found"}
+
+        # Query all related data
+        result = {"profile_id": profile_id, "data": {}}
+        with conn.cursor() as cur:
+            # Work experiences
+            cur.execute(
+                "SELECT * FROM work_experiences WHERE developer_id = %s", (profile_id,)
+            )
+            result["data"]["work_experiences"] = []
+            for row in cur.fetchall():
+                result["data"]["work_experiences"].append(dict(row))
+
+            # Educations
+            cur.execute(
+                "SELECT * FROM educations WHERE developer_id = %s", (profile_id,)
+            )
+            result["data"]["educations"] = []
+            for row in cur.fetchall():
+                result["data"]["educations"].append(dict(row))
+
+            # Certifications
+            cur.execute(
+                "SELECT * FROM certifications WHERE developer_id = %s", (profile_id,)
+            )
+            result["data"]["certifications"] = []
+            for row in cur.fetchall():
+                result["data"]["certifications"].append(dict(row))
+
+            # Portfolio items
+            cur.execute(
+                "SELECT * FROM portfolio_items WHERE developer_id = %s", (profile_id,)
+            )
+            result["data"]["portfolio_items"] = []
+            for row in cur.fetchall():
+                result["data"]["portfolio_items"].append(dict(row))
+
+        # Close the connection
+        conn.close()
+
+        # Add counts
+        result["counts"] = {
+            "work_experiences": len(result["data"]["work_experiences"]),
+            "educations": len(result["data"]["educations"]),
+            "certifications": len(result["data"]["certifications"]),
+            "portfolio_items": len(result["data"]["portfolio_items"]),
+        }
+
+        # Convert to JSON-serializable format
+        for category in result["data"]:
+            for i, item in enumerate(result["data"][category]):
+                result["data"][category][i] = {
+                    k: json_serializable(v) for k, v in item.items()
+                }
+
+        return result
+
+    except Exception as e:
+        return {"error": str(e), "traceback": traceback.format_exc()}
