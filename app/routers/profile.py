@@ -116,10 +116,26 @@ def get_developer_profile(
             content={"message": "Only developers can access developer profiles."},
         )
 
-    # Modified to explicitly load related data
-    profile = (
+    # First get the basic profile
+    profile_basic = (
         db.query(models.DeveloperProfile)
         .filter(models.DeveloperProfile.user_id == current_user.id)
+        .first()
+    )
+
+    if not profile_basic:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={
+                "message": "Developer profile not found. Please create a profile to get started.",
+                "profile": None,
+            },
+        )
+
+    # Now that we have the profile ID, query again with eager loading
+    profile = (
+        db.query(models.DeveloperProfile)
+        .filter(models.DeveloperProfile.id == profile_basic.id)
         .options(
             joinedload(models.DeveloperProfile.work_experiences),
             joinedload(models.DeveloperProfile.educations),
@@ -130,14 +146,12 @@ def get_developer_profile(
         .first()
     )
 
-    if not profile:
-        return JSONResponse(
-            status_code=status.HTTP_404_NOT_FOUND,
-            content={
-                "message": "Developer profile not found. Please create a profile to get started.",
-                "profile": None,
-            },
-        )
+    # Add logging to see what's happening
+    print(f"Profile ID: {profile.id}")
+    print(f"Work Experiences: {len(profile.work_experiences)}")
+    print(f"Educations: {len(profile.educations)}")
+    print(f"Certifications: {len(profile.certifications)}")
+    print(f"Portfolio Items: {len(profile.portfolio_items)}")
 
     # Manually serialize the profile and its related data
     result = {
