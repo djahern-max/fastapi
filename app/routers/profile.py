@@ -63,9 +63,17 @@ def get_profile(
 
     # Convert ORM objects to Pydantic schemas
     if current_user.user_type == models.UserType.developer:
+        # Modified to explicitly load related data
         developer_profile_obj = (
             db.query(models.DeveloperProfile)
             .filter(models.DeveloperProfile.user_id == current_user.id)
+            .options(
+                joinedload(models.DeveloperProfile.work_experiences),
+                joinedload(models.DeveloperProfile.educations),
+                joinedload(models.DeveloperProfile.certifications),
+                joinedload(models.DeveloperProfile.portfolio_items),
+                joinedload(models.DeveloperProfile.ratings),
+            )
             .first()
         )
         if developer_profile_obj:
@@ -108,9 +116,17 @@ def get_developer_profile(
             content={"message": "Only developers can access developer profiles."},
         )
 
+    # Modified to explicitly load related data
     profile = (
         db.query(models.DeveloperProfile)
         .filter(models.DeveloperProfile.user_id == current_user.id)
+        .options(
+            joinedload(models.DeveloperProfile.work_experiences),
+            joinedload(models.DeveloperProfile.educations),
+            joinedload(models.DeveloperProfile.certifications),
+            joinedload(models.DeveloperProfile.portfolio_items),
+            joinedload(models.DeveloperProfile.ratings),
+        )
         .first()
     )
 
