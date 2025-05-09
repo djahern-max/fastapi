@@ -19,7 +19,14 @@ import random
 from datetime import datetime, timedelta
 import bcrypt
 import psycopg2
-from psycopg2.extras import Json, RealDictCursor
+from psycopg2.extras import Json
+
+# Add these imports to help with configuring paths
+import sys
+
+sys.path.append(
+    "/home/dane/app/src"
+)  # Add the parent directory to the path so we can access app modules
 import shutil
 from typing import List, Dict, Any, Optional, Tuple
 import uuid
@@ -33,10 +40,10 @@ DB_PARAMS = {
     "port": "5432",
 }
 
-# Path to headshot images
-HEADSHOTS_PATH = "/Users/ryze.ai/Desktop/Mock_Headshot"
+# Path to headshot images - will need to update this to where you'll upload the images
+HEADSHOTS_PATH = "/home/dane/uploads/headshots"
 
-# Target path for profile images (adjust as needed)
+# Target path for profile images
 TARGET_PATH = "/home/dane/app/uploads/profile_images"
 
 # Skills list
@@ -832,8 +839,15 @@ def copy_profile_image(source_path: str, filename: str) -> str:
 
     # Copy the file
     try:
-        shutil.copy2(os.path.join(source_path, filename), target_file)
-        return target_file
+        if os.path.exists(os.path.join(source_path, filename)):
+            shutil.copy2(os.path.join(source_path, filename), target_file)
+            return target_file
+        else:
+            print(
+                f"Warning: Source file {os.path.join(source_path, filename)} not found."
+            )
+            # Use a dummy path for now - we'll handle the actual file separately
+            return f"/profile_images/{unique_filename}"
     except Exception as e:
         print(f"Error copying image file: {e}")
         return None
@@ -886,13 +900,12 @@ def insert_developer_profile(conn, user_id: int, profile_data: Dict[str, Any]) -
     """Insert a developer profile into the database and return the profile ID"""
     cursor = conn.cursor()
     try:
-        # Copy profile image and get the path
+        # Generate unique profile image path
         profile_image_path = None
         if profile_data.get("headshot_path"):
-            source_path = os.path.join(HEADSHOTS_PATH, profile_data["headshot_path"])
-            if os.path.exists(source_path):
-                profile_image_path = f"/profile_images/{profile_data['headshot_path']}"
-                # In a real scenario, you'd actually copy the file to your server/storage
+            unique_id = uuid.uuid4().hex[:8]
+            # Store a path that will be used by your frontend
+            profile_image_path = f"https://nyc3.digitaloceanspaces.com/ryzevideosv3/profile_images/profile_{unique_id}_{profile_data['headshot_path']}"
 
         # Insert developer profile
         cursor.execute(
@@ -1102,17 +1115,45 @@ def create_mock_profiles(num_profiles=6):
 
 
 if __name__ == "__main__":
-    # Ensure the headshots directory exists
+    # Check if the headshots directory exists, but don't quit if it doesn't
     if not os.path.exists(HEADSHOTS_PATH):
-        print(f"Error: Headshots directory not found at {HEADSHOTS_PATH}")
-        sys.exit(1)
+        print(f"Warning: Headshots directory not found at {HEADSHOTS_PATH}")
+        print(
+            "The script will continue but you'll need to upload the images separately"
+        )
+        # Create the directory in case we need it later
+        os.makedirs(HEADSHOTS_PATH, exist_ok=True)
 
-    # Check if we have the required number of headshots
-    headshot_files = [
-        f for f in os.listdir(HEADSHOTS_PATH) if f.startswith("Headshot_")
-    ]
-    if len(headshot_files) < 6:
-        print(f"Warning: Expected 6 headshot files, found {len(headshot_files)}")
+    # Create the target directory for profile images
+    os.makedirs(TARGET_PATH, exist_ok=True)
+
+    # Count available headshots
+    try:
+        headshot_files = [
+            f for f in os.listdir(HEADSHOTS_PATH) if f.startswith("Headshot_")
+        ]
+        if len(headshot_files) < 6:
+            print(f"Warning: Expected 6 headshot files, found {len(headshot_files)}")
+    except Exception as e:
+        print(f"Warning: Couldn't check headshot files: {e}")
 
     # Create the mock profiles
+    print("Creating 6 mock female developer profiles...")
     create_mock_profiles(6)
+
+    print(
+        "\nIMPORTANT: You'll need to upload the headshot images using SFTP or similar to:"
+    )
+    print(f"1. Upload headshots to: {HEADSHOTS_PATH}")
+    print(
+        f"2. These will be referenced in the database with paths like: profile_images/Headshot_N.png"
+    )
+    print(
+        "3. For production use, you'll need to upload these to your DigitalOcean Spaces"
+    )
+    print("\nExample image paths that were created in the database:")
+    print(
+        "https://nyc3.digitaloceanspaces.com/ryzevideosv3/profile_images/profile_XXXXXXXX_Headshot_1.png"
+    )
+    print("(Replace XXXXXXXX with the actual unique IDs in the database)")
+    print("\nDone!")
