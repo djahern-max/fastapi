@@ -54,9 +54,8 @@ oauth.register(
     client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
     authorize_url="https://www.linkedin.com/oauth/v2/authorization",
     access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
-    client_kwargs={"scope": "openid profile email"},  # Match what's in the UI
+    client_kwargs={"scope": "r_liteprofile r_emailaddress"},  # LinkedIn requires specific scopes
 )
-
 
 @router.get("/auth/{provider}")
 async def login(provider: str, request: Request):
@@ -144,24 +143,26 @@ async def auth_callback(
     try:
         # Exchange code for token with explicit client_secret for LinkedIn
         if provider == "linkedin":
-            # Get client instance
-            client = oauth.create_client(provider)
-
+            # Get the exact redirect URI from env variables
+            redirect_uri = os.getenv("LINKEDIN_OAUTH_REDIRECT_URL")
+            debug_log(f"Using redirect URI: {redirect_uri}")
+            
             # Add explicit parameters for token exchange
             token_params = {
                 "client_id": os.getenv("LINKEDIN_CLIENT_ID"),
                 "client_secret": os.getenv("LINKEDIN_CLIENT_SECRET"),
                 "code": code,
-                "redirect_uri": str(
-                    request.url_for("auth_callback", provider=provider)
-                ),
+                "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             }
-
+            
+            # Log the parameters (mask the secret)
+            debug_log(f"Token params: {token_params}")
+            
             # Make the token request manually
             token_endpoint = "https://www.linkedin.com/oauth/v2/accessToken"
             headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
+            
             token_response = requests.post(
                 token_endpoint, data=token_params, headers=headers
             )
