@@ -1,7 +1,0 @@
-Connect to Postgres Locally:
-
-psql -U postgres
-
-Backend:
-
-tree -I 'venv|__pycache__|.git|.pytest_cache|.mypy_cache' --dirsfirst
