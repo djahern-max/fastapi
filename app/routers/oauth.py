@@ -21,9 +21,9 @@ router = APIRouter()
 oauth = OAuth()
 
 
-# Add this function at the top of your file
+# Add this function at the top of your oauth.py file
 def debug_log(message):
-    with open("/home/dane/linkedin_debug.log", "a") as f:
+    with open("/home/dane/google_oauth_debug.log", "a") as f:
         f.write(f"{datetime.datetime.now()}: {message}\n")
 
 
@@ -32,7 +32,9 @@ oauth.register(
     name="google",
     client_id=os.getenv("GOOGLE_CLIENT_ID"),
     client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
+    access_token_url="https://oauth2.googleapis.com/token",
+    userinfo_url="https://www.googleapis.com/oauth2/v3/userinfo",
     client_kwargs={
         "scope": "openid email profile",
         "prompt": "select_account",
