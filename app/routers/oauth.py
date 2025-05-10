@@ -54,7 +54,10 @@ oauth.register(
     client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
     authorize_url="https://www.linkedin.com/oauth/v2/authorization",
     access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
-    client_kwargs={"scope": "openid profile email"},  # Match what's in the UI
+    client_kwargs={
+        "scope": "r_liteprofile r_emailaddress",  # Change from "openid profile email" to LinkedIn's actual scopes
+        "token_endpoint_auth_method": "client_secret_post"  # Add this line
+    },
 )
 
 
@@ -142,39 +145,50 @@ async def auth_callback(
 
     try:
         # Exchange code for token with explicit client_secret for LinkedIn
+# Exchange code for token with explicit client_secret for LinkedIn
         if provider == "linkedin":
-            # Get client instance
-            client = oauth.create_client(provider)
-
+            # Get the exact redirect URI from env variables
+            redirect_uri = os.getenv("LINKEDIN_OAUTH_REDIRECT_URL")
+            debug_log(f"Using redirect URI: {redirect_uri}")
+            
             # Add explicit parameters for token exchange
             token_params = {
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
                 "client_id": os.getenv("LINKEDIN_CLIENT_ID"),
                 "client_secret": os.getenv("LINKEDIN_CLIENT_SECRET"),
-                "code": code,
-                "redirect_uri": str(
-                    request.url_for("auth_callback", provider=provider)
-                ),
-                "grant_type": "authorization_code",
             }
-
-            # Make the token request manually
+            
+            debug_log(f"LinkedIn token params: {token_params}")
+            
+            # Make the token request
             token_endpoint = "https://www.linkedin.com/oauth/v2/accessToken"
             headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-            token_response = requests.post(
-                token_endpoint, data=token_params, headers=headers
-            )
-            debug_log(
-                f"LinkedIn token response: {token_response.status_code} - {token_response.text}"
-            )
-
-            if token_response.status_code != 200:
-                logger.error(f"LinkedIn token error: {token_response.text}")
-                return RedirectResponse(
-                    url=f"{frontend_url}/oauth-error?error=token_failed&provider={provider}"
+            
+            try:
+                token_response = requests.post(
+                    token_endpoint, 
+                    data=token_params, 
+                    headers=headers,
+                    timeout=10  # Add timeout
                 )
+                
+                debug_log(f"LinkedIn token response status: {token_response.status_code}")
+                debug_log(f"LinkedIn token response text: {token_response.text[:200]}...")  # Log first 200 chars
+                
+                if token_response.status_code != 200:
+                    logger.error(f"LinkedIn token error: {token_response.text}")
+                    return RedirectResponse(
+                        url=f"{frontend_url}/oauth-error?error=token_failed&provider={provider}"
+                    )
 
-            token = token_response.json()
+                token = token_response.json()
+            except Exception as e:
+                logger.error(f"LinkedIn token request exception: {str(e)}")
+                return RedirectResponse(
+                    url=f"{frontend_url}/oauth-error?error=token_request_failed&provider={provider}"
+                )
         else:
             # Use standard flow for other providers
             token = await oauth.create_client(provider).authorize_access_token(request)
