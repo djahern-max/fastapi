@@ -95,14 +95,13 @@ async def login(provider: str, request: Request):
 
 
 @router.get("/auth/{provider}/callback")
-async def auth_callback(
-    provider: str, request: Request, db: Session = Depends(database.get_db)
-):
+async def auth_callback(provider: str, request: Request, db: Session = Depends(database.get_db)):
     try:
         debug_log(f"Auth callback started for provider: {provider}")
-
-        # Log the full request URL for debugging
         debug_log(f"Full request URL: {request.url}")
+        
+        # Log the query parameters
+        debug_log(f"Query params: {dict(request.query_params)}")
     except Exception as e:
         logger.error(f"Debug logging failed: {str(e)}")
 
@@ -190,10 +189,13 @@ async def auth_callback(
         full_name = ""
 
         if provider == "google":
-            user_info = token.get("userinfo", {})
-            email = user_info.get("email")
-            provider_id = user_info.get("sub")
-            full_name = user_info.get("name", "")
+                    debug_log("Processing Google callback")
+                    user_info = token.get("userinfo", {})
+                    debug_log(f"Google user info: {user_info}")
+                    email = user_info.get("email")
+                    provider_id = user_info.get("sub")
+                    full_name = user_info.get("name", "")
+                    debug_log(f"Extracted Google data - Email: '{email}', ID: '{provider_id}'")
 
         elif provider == "github":
             # Get user data from GitHub
