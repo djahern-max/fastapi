@@ -32,9 +32,10 @@ oauth.register(
     name="google",
     client_id=os.getenv("GOOGLE_CLIENT_ID"),
     client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-    authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
+    # Don't use server_metadata_url
+    authorize_url="https://accounts.google.com/o/oauth2/auth",
     access_token_url="https://oauth2.googleapis.com/token",
-    userinfo_url="https://www.googleapis.com/oauth2/v3/userinfo",
+    userinfo_endpoint="https://www.googleapis.com/oauth2/v3/userinfo",
     client_kwargs={
         "scope": "openid email profile",
         "prompt": "select_account",
@@ -189,13 +190,55 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(d
         full_name = ""
 
         if provider == "google":
-                    debug_log("Processing Google callback")
-                    user_info = token.get("userinfo", {})
-                    debug_log(f"Google user info: {user_info}")
-                    email = user_info.get("email")
-                    provider_id = user_info.get("sub")
-                    full_name = user_info.get("name", "")
-                    debug_log(f"Extracted Google data - Email: '{email}', ID: '{provider_id}'")
+            try:
+                # Exchange code for token without relying on OAuth client's authorize_access_token
+                token_data = {
+                    "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+                    "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+                    "code": code,
+                    "redirect_uri": os.getenv("GOOGLE_OAUTH_REDIRECT_URL"),
+                    "grant_type": "authorization_code"
+                }
+                
+                logger.info(f"Requesting token from Google with data: {token_data}")
+                
+                token_response = requests.post(
+                    "https://oauth2.googleapis.com/token",
+                    data=token_data,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"}
+                )
+                
+                if token_response.status_code != 200:
+                    logger.error(f"Failed to get token from Google: {token_response.text}")
+                    return RedirectResponse(
+                        url=f"{frontend_url}/oauth-error?error=token_failed&provider={provider}"
+                    )
+                    
+                token = token_response.json()
+                access_token = token.get("access_token")
+                
+                # Call Google's userinfo endpoint directly
+                userinfo_response = requests.get(
+                    "https://www.googleapis.com/oauth2/v3/userinfo",
+                    headers={"Authorization": f"Bearer {access_token}"}
+                )
+                
+                if userinfo_response.status_code != 200:
+                    logger.error(f"Failed to get user info from Google: {userinfo_response.text}")
+                    return RedirectResponse(
+                        url=f"{frontend_url}/oauth-error?error=user_info_failed&provider={provider}"
+                    )
+                    
+                user_info = userinfo_response.json()
+                email = user_info.get("email")
+                provider_id = user_info.get("sub")
+                full_name = user_info.get("name", "")
+                
+            except Exception as e:
+                logger.error(f"Exception in Google OAuth: {str(e)}")
+                return RedirectResponse(
+                    url=f"{frontend_url}/oauth-error?error=user_info_failed&provider={provider}"
+                )
 
         elif provider == "github":
             # Get user data from GitHub
