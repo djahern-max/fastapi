@@ -148,27 +148,32 @@ async def auth_callback(
     try:
         # Exchange code for token with explicit client_secret for LinkedIn
         if provider == "linkedin":
-            # Get client instance
-            client = oauth.create_client(provider)
-
-            # Add explicit parameters for token exchange
-            token_params = {
-                "client_id": os.getenv("LINKEDIN_CLIENT_ID"),
-                "client_secret": os.getenv("LINKEDIN_CLIENT_SECRET"),
-                "code": code,
-                "redirect_uri": str(
-                    request.url_for("auth_callback", provider=provider)
-                ),
-                "grant_type": "authorization_code",
-            }
-
-            # Make the token request manually
-            token_endpoint = "https://www.linkedin.com/oauth/v2/accessToken"
-            headers = {"Content-Type": "application/x-www-form-urlencoded"}
-
-            token_response = requests.post(
-                token_endpoint, data=token_params, headers=headers
-            )
+            try:
+                # Exchange code for token immediately
+                token_url = "https://www.linkedin.com/oauth/v2/accessToken"
+                redirect_uri = os.getenv("LINKEDIN_OAUTH_REDIRECT_URL")
+                
+                # Log the exact redirect URI being used
+                logger.info(f"Using redirect URI for token exchange: {redirect_uri}")
+                
+                token_data = {
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                    "client_id": os.getenv("LINKEDIN_CLIENT_ID"),
+                    "client_secret": os.getenv("LINKEDIN_CLIENT_SECRET"),
+                }
+                
+                # Log the parameters (excluding secret)
+                log_data = token_data.copy()
+                log_data["client_secret"] = "REDACTED"
+                logger.info(f"Token exchange parameters: {log_data}")
+                
+                token_response = requests.post(
+                    token_url,
+                    data=token_data,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"}
+                )
             debug_log(
                 f"LinkedIn token response: {token_response.status_code} - {token_response.text}"
             )
