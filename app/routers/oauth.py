@@ -99,7 +99,6 @@ async def auth_callback(
 ):
     try:
         debug_log(f"Auth callback started for provider: {provider}")
-
         # Log the full request URL for debugging
         debug_log(f"Full request URL: {request.url}")
     except Exception as e:
