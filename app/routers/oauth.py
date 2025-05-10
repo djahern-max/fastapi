@@ -55,8 +55,9 @@ oauth.register(
     authorize_url="https://www.linkedin.com/oauth/v2/authorization",
     access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
     client_kwargs={
-        "scope": "r_liteprofile r_emailaddress",  # Change from "openid profile email" to LinkedIn's actual scopes
-        "token_endpoint_auth_method": "client_secret_post"  # Add this line
+        # Use OpenID Connect scopes for email and profile
+        "scope": "openid profile email",
+        "token_endpoint_auth_method": "client_secret_post"
     },
 )
 
@@ -145,7 +146,6 @@ async def auth_callback(
 
     try:
         # Exchange code for token with explicit client_secret for LinkedIn
-# Exchange code for token with explicit client_secret for LinkedIn
         if provider == "linkedin":
             # Get the exact redirect URI from env variables
             redirect_uri = os.getenv("LINKEDIN_OAUTH_REDIRECT_URL")
