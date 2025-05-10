@@ -21,9 +21,9 @@ router = APIRouter()
 oauth = OAuth()
 
 
-# Add this function at the top of your oauth.py file
+# Add this function at the top of your file
 def debug_log(message):
-    with open("/home/dane/google_oauth_debug.log", "a") as f:
+    with open("/home/dane/linkedin_debug.log", "a") as f:
         f.write(f"{datetime.datetime.now()}: {message}\n")
 
 
@@ -32,10 +32,7 @@ oauth.register(
     name="google",
     client_id=os.getenv("GOOGLE_CLIENT_ID"),
     client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-    # Don't use server_metadata_url
-    authorize_url="https://accounts.google.com/o/oauth2/auth",
-    access_token_url="https://oauth2.googleapis.com/token",
-    userinfo_endpoint="https://www.googleapis.com/oauth2/v3/userinfo",
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
     client_kwargs={
         "scope": "openid email profile",
         "prompt": "select_account",
@@ -51,14 +48,15 @@ oauth.register(
     client_kwargs={"scope": "user:email"},
 )
 
-oauth.register(
-    name="linkedin",
-    client_id=os.getenv("LINKEDIN_CLIENT_ID"),
-    client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
-    authorize_url="https://www.linkedin.com/oauth/v2/authorization",
-    access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
-    client_kwargs={"scope": "openid profile email"},  # Match the scopes you have in LinkedIn Console
-)
+# oauth.register(
+#     name="linkedin",
+#     client_id=os.getenv("LINKEDIN_CLIENT_ID"),
+#     client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
+#     authorize_url="https://www.linkedin.com/oauth/v2/authorization",
+#     access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
+#     client_kwargs={"scope": "openid profile email"},  # Match what's in the UI
+# )
+
 
 @router.get("/auth/{provider}")
 async def login(provider: str, request: Request):
@@ -96,13 +94,14 @@ async def login(provider: str, request: Request):
 
 
 @router.get("/auth/{provider}/callback")
-async def auth_callback(provider: str, request: Request, db: Session = Depends(database.get_db)):
+async def auth_callback(
+    provider: str, request: Request, db: Session = Depends(database.get_db)
+):
     try:
         debug_log(f"Auth callback started for provider: {provider}")
+
+        # Log the full request URL for debugging
         debug_log(f"Full request URL: {request.url}")
-        
-        # Log the query parameters
-        debug_log(f"Query params: {dict(request.query_params)}")
     except Exception as e:
         logger.error(f"Debug logging failed: {str(e)}")
 
@@ -145,26 +144,24 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(d
     try:
         # Exchange code for token with explicit client_secret for LinkedIn
         if provider == "linkedin":
-            # Get the exact redirect URI from env variables
-            redirect_uri = os.getenv("LINKEDIN_OAUTH_REDIRECT_URL")
-            debug_log(f"Using redirect URI: {redirect_uri}")
-            
+            # Get client instance
+            client = oauth.create_client(provider)
+
             # Add explicit parameters for token exchange
             token_params = {
                 "client_id": os.getenv("LINKEDIN_CLIENT_ID"),
                 "client_secret": os.getenv("LINKEDIN_CLIENT_SECRET"),
                 "code": code,
-                "redirect_uri": redirect_uri,
+                "redirect_uri": str(
+                    request.url_for("auth_callback", provider=provider)
+                ),
                 "grant_type": "authorization_code",
             }
-            
-            # Log the parameters (mask the secret)
-            debug_log(f"Token params: {token_params}")
-            
+
             # Make the token request manually
             token_endpoint = "https://www.linkedin.com/oauth/v2/accessToken"
             headers = {"Content-Type": "application/x-www-form-urlencoded"}
-            
+
             token_response = requests.post(
                 token_endpoint, data=token_params, headers=headers
             )
@@ -190,55 +187,10 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(d
         full_name = ""
 
         if provider == "google":
-            try:
-                # Exchange code for token without relying on OAuth client's authorize_access_token
-                token_data = {
-                    "client_id": os.getenv("GOOGLE_CLIENT_ID"),
-                    "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
-                    "code": code,
-                    "redirect_uri": os.getenv("GOOGLE_OAUTH_REDIRECT_URL"),
-                    "grant_type": "authorization_code"
-                }
-                
-                logger.info(f"Requesting token from Google with data: {token_data}")
-                
-                token_response = requests.post(
-                    "https://oauth2.googleapis.com/token",
-                    data=token_data,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"}
-                )
-                
-                if token_response.status_code != 200:
-                    logger.error(f"Failed to get token from Google: {token_response.text}")
-                    return RedirectResponse(
-                        url=f"{frontend_url}/oauth-error?error=token_failed&provider={provider}"
-                    )
-                    
-                token = token_response.json()
-                access_token = token.get("access_token")
-                
-                # Call Google's userinfo endpoint directly
-                userinfo_response = requests.get(
-                    "https://www.googleapis.com/oauth2/v3/userinfo",
-                    headers={"Authorization": f"Bearer {access_token}"}
-                )
-                
-                if userinfo_response.status_code != 200:
-                    logger.error(f"Failed to get user info from Google: {userinfo_response.text}")
-                    return RedirectResponse(
-                        url=f"{frontend_url}/oauth-error?error=user_info_failed&provider={provider}"
-                    )
-                    
-                user_info = userinfo_response.json()
-                email = user_info.get("email")
-                provider_id = user_info.get("sub")
-                full_name = user_info.get("name", "")
-                
-            except Exception as e:
-                logger.error(f"Exception in Google OAuth: {str(e)}")
-                return RedirectResponse(
-                    url=f"{frontend_url}/oauth-error?error=user_info_failed&provider={provider}"
-                )
+            user_info = token.get("userinfo", {})
+            email = user_info.get("email")
+            provider_id = user_info.get("sub")
+            full_name = user_info.get("name", "")
 
         elif provider == "github":
             # Get user data from GitHub
