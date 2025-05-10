@@ -54,7 +54,11 @@ oauth.register(
     client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
     authorize_url="https://www.linkedin.com/oauth/v2/authorization",
     access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
-    client_kwargs={"scope": "openid profile email"},  # Match what's in the UI
+    client_kwargs={
+        "scope": "r_liteprofile r_emailaddress",
+        "token_endpoint_auth_method": "client_secret_post",
+        "code_challenge_method": None,  # Disable PKCE
+    },
 )
 
 
