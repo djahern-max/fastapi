@@ -54,7 +54,7 @@ oauth.register(
     client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
     authorize_url="https://www.linkedin.com/oauth/v2/authorization",
     access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
-    client_kwargs={},  # No scope
+    client_kwargs={"scope": "r_basicprofile"},  # Try this basic scope
 )
 
 
