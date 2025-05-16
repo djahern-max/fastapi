@@ -54,7 +54,7 @@ oauth.register(
     client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
     authorize_url="https://www.linkedin.com/oauth/v2/authorization",
     access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
-    client_kwargs={"scope": "openid profile email"},  # Match what's in the UI
+    client_kwargs={"scope": "r_liteprofile r_emailaddress"},
 )
 
 
@@ -242,19 +242,6 @@ async def auth_callback(
                 "X-Restli-Protocol-Version": "2.0.0",  # Important for LinkedIn API v2
                 "Content-Type": "application/json",
             }
-
-            # Try OpenID Connect userinfo endpoint first
-            userinfo_url = "https://api.linkedin.com/v2/userinfo"
-            logger.info(f"Requesting LinkedIn userinfo from: {userinfo_url}")
-
-            userinfo_response = requests.get(userinfo_url, headers=headers)
-            debug_log(
-                f"LinkedIn userinfo response: {userinfo_response.status_code} - {userinfo_response.text}"
-            )
-            logger.info(
-                f"LinkedIn userinfo response status: {userinfo_response.status_code}"
-            )
-            logger.info(f"LinkedIn userinfo response: {userinfo_response.text}")
 
             # If userinfo endpoint works, use it
             if userinfo_response.status_code == 200:
