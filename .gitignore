@@ -63,3 +63,5 @@ app/.env
 
 # Ignore all files in the videos directory
 videos/
+
+notes.txt
