@@ -152,9 +152,9 @@ async def auth_callback(
                 "client_id": os.getenv("LINKEDIN_CLIENT_ID"),
                 "client_secret": os.getenv("LINKEDIN_CLIENT_SECRET"),
                 "code": code,
-                "redirect_uri": str(
-                    request.url_for("auth_callback", provider=provider)
-                ),
+                "redirect_uri": os.getenv(
+                    "LINKEDIN_OAUTH_REDIRECT_URL"
+                ),  # Use exact URL from env var
                 "grant_type": "authorization_code",
             }
 
