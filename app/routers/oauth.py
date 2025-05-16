@@ -236,81 +236,95 @@ async def auth_callback(
             logger.info(
                 f"LinkedIn access token obtained: {access_token[:10]}... (truncated)"
             )
-
             headers = {
                 "Authorization": f"Bearer {access_token}",
                 "X-Restli-Protocol-Version": "2.0.0",  # Important for LinkedIn API v2
                 "Content-Type": "application/json",
             }
 
-            # If userinfo endpoint works, use it
-            if userinfo_response.status_code == 200:
-                user_info = userinfo_response.json()
-                logger.info(f"LinkedIn userinfo data: {user_info}")
+            # Try OpenID Connect userinfo endpoint
+            userinfo_url = "https://api.linkedin.com/v2/userinfo"
+            logger.info(f"Requesting LinkedIn userinfo from: {userinfo_url}")
 
-                # Extract data from OpenID userinfo response
-                email = user_info.get("email")
-                provider_id = user_info.get("sub")
-                full_name = user_info.get("name", "")
-                first_name = user_info.get("given_name", "")
-                last_name = user_info.get("family_name", "")
+            try:
+                userinfo_response = requests.get(userinfo_url, headers=headers)
+                debug_log(
+                    f"LinkedIn userinfo response: {userinfo_response.status_code} - {userinfo_response.text}"
+                )
+                logger.info(
+                    f"LinkedIn userinfo response status: {userinfo_response.status_code}"
+                )
+                logger.info(f"LinkedIn userinfo response: {userinfo_response.text}")
 
-                # If we got what we needed, skip the other API calls
-                if email and provider_id:
-                    logger.info("Successfully retrieved user info from OpenID endpoint")
-                    # Full name fallback if needed
-                    if not full_name and first_name and last_name:
-                        full_name = f"{first_name} {last_name}".strip()
+                # If userinfo endpoint works, use it
+                if userinfo_response.status_code == 200:
+                    user_info = userinfo_response.json()
+                    logger.info(f"LinkedIn userinfo data: {user_info}")
+
+                    # Extract data from OpenID userinfo response
+                    email = user_info.get("email")
+                    provider_id = user_info.get("sub")
+                    full_name = user_info.get("name", "")
+                    first_name = user_info.get("given_name", "")
+                    last_name = user_info.get("family_name", "")
+
+                    # If we got what we needed, skip the other API calls
+                    if email and provider_id:
+                        logger.info(
+                            "Successfully retrieved user info from OpenID endpoint"
+                        )
+                        # Full name fallback if needed
+                        if not full_name and first_name and last_name:
+                            full_name = f"{first_name} {last_name}".strip()
+                    else:
+                        logger.info(
+                            "OpenID endpoint missing email or ID, falling back to API"
+                        )
+                        # Fall back to API endpoints by continuing to the profile/email API calls below
                 else:
-                    logger.info(
-                        "OpenID endpoint missing email or ID, falling back to API"
-                    )
-                    # Fall back to API endpoints
+                    logger.info("OpenID endpoint failed, falling back to API")
+            except Exception as e:
+                logger.error(f"Error accessing LinkedIn userinfo endpoint: {str(e)}")
+                logger.info("Falling back to LinkedIn API endpoints")
 
-            else:
-                logger.info("OpenID endpoint failed, falling back to API")
+            # Get profile data from LinkedIn API (as fallback or primary method)
+            profile_url = "https://api.linkedin.com/v2/me"
+            logger.info(f"Requesting LinkedIn profile from: {profile_url}")
 
-            # If OpenID didn't provide what we need, use the API endpoints
-            if not (userinfo_response.status_code == 200 and email and provider_id):
-                # Step 1: Get basic profile data
-                profile_url = "https://api.linkedin.com/v2/me"
-                logger.info(f"Requesting LinkedIn profile from: {profile_url}")
+            profile_response = requests.get(profile_url, headers=headers)
+            logger.info(
+                f"LinkedIn profile response status: {profile_response.status_code}"
+            )
 
-                profile_response = requests.get(profile_url, headers=headers)
-                logger.info(
-                    f"LinkedIn profile response status: {profile_response.status_code}"
+            if profile_response.status_code != 200:
+                logger.error(f"LinkedIn profile error: {profile_response.text}")
+                return RedirectResponse(
+                    url=f"{frontend_url}/oauth-error?error=profile_failed&provider={provider}"
                 )
 
-                if profile_response.status_code != 200:
-                    logger.error(f"LinkedIn profile error: {profile_response.text}")
-                    return RedirectResponse(
-                        url=f"{frontend_url}/oauth-error?error=profile_failed&provider={provider}"
-                    )
+            # Log the full response for debugging
+            profile_info = profile_response.json()
+            logger.info(f"LinkedIn profile data: {profile_info}")
 
-                # Log the full response for debugging
-                profile_info = profile_response.json()
-                logger.info(f"LinkedIn profile data: {profile_info}")
+            # Step 2: Get email address
+            email_url = "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))"
+            logger.info(f"Requesting LinkedIn email from: {email_url}")
 
-                # Step 2: Get email address
-                email_url = "https://api.linkedin.com/v2/emailAddress?q=members&projection=(elements*(handle~))"
-                logger.info(f"Requesting LinkedIn email from: {email_url}")
+            email_response = requests.get(email_url, headers=headers)
+            logger.info(f"LinkedIn email response status: {email_response.status_code}")
 
-                email_response = requests.get(email_url, headers=headers)
-                logger.info(
-                    f"LinkedIn email response status: {email_response.status_code}"
+            if email_response.status_code != 200:
+                logger.error(f"LinkedIn email error: {email_response.text}")
+                return RedirectResponse(
+                    url=f"{frontend_url}/oauth-error?error=email_failed&provider={provider}"
                 )
 
-                if email_response.status_code != 200:
-                    logger.error(f"LinkedIn email error: {email_response.text}")
-                    return RedirectResponse(
-                        url=f"{frontend_url}/oauth-error?error=email_failed&provider={provider}"
-                    )
+            # Log the full response for debugging
+            email_info = email_response.json()
+            logger.info(f"LinkedIn email data: {email_info}")
 
-                # Log the full response for debugging
-                email_info = email_response.json()
-                logger.info(f"LinkedIn email data: {email_info}")
-
-                # Extract provider ID (should always be available)
+            # Extract provider ID if not already set from userinfo endpoint
+            if not provider_id:
                 provider_id = profile_info.get("id")
                 if not provider_id:
                     logger.error("LinkedIn profile missing ID field")
@@ -318,8 +332,8 @@ async def auth_callback(
                         url=f"{frontend_url}/oauth-error?error=no_id&provider={provider}"
                     )
 
-                # Extract email
-                email = None
+            # Extract email if not already set from userinfo endpoint
+            if not email:
                 try:
                     if "elements" in email_info and email_info["elements"]:
                         email_element = email_info["elements"][0]
@@ -337,7 +351,8 @@ async def auth_callback(
                         url=f"{frontend_url}/oauth-error?error=no_email&provider={provider}"
                     )
 
-                # Extract name fields
+            # Extract name fields if not already set from userinfo endpoint
+            if not full_name:
                 first_name = ""
                 last_name = ""
 
