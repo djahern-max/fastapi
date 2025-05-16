@@ -54,7 +54,9 @@ oauth.register(
     client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
     authorize_url="https://www.linkedin.com/oauth/v2/authorization",
     access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
-    client_kwargs={"scope": "profile email"},  # Updated scopes
+    client_kwargs={
+        "scope": "r_liteprofile r_emailaddress"
+    },  # Correct LinkedIn API scopes
 )
 
 
