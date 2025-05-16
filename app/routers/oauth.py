@@ -48,14 +48,14 @@ oauth.register(
     client_kwargs={"scope": "user:email"},
 )
 
-# oauth.register(
-#     name="linkedin",
-#     client_id=os.getenv("LINKEDIN_CLIENT_ID"),
-#     client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
-#     authorize_url="https://www.linkedin.com/oauth/v2/authorization",
-#     access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
-#     client_kwargs={"scope": "openid profile email"},  # Match what's in the UI
-# )
+oauth.register(
+    name="linkedin",
+    client_id=os.getenv("LINKEDIN_CLIENT_ID"),
+    client_secret=os.getenv("LINKEDIN_CLIENT_SECRET"),
+    authorize_url="https://www.linkedin.com/oauth/v2/authorization",
+    access_token_url="https://www.linkedin.com/oauth/v2/accessToken",
+    client_kwargs={"scope": "openid profile email"},  # Match what's in the UI
+)
 
 
 @router.get("/auth/{provider}")
