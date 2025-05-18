@@ -534,26 +534,20 @@ class Request(Base, TimestampMixin):
 
     # Visibility and sharing
     is_public = Column(Boolean, default=False)
-    contains_sensitive_data = Column(Boolean, default=False)
+    # Removed: contains_sensitive_data = Column(Boolean, default=False)
 
     # Business details
     estimated_budget = Column(Float, nullable=True)
     agreed_amount = Column(Float, nullable=True)
 
     # New fields for idea/collaboration feature
-    is_idea = Column(Boolean, default=False)  # Indicates if this is "Just an Idea"
-    seeks_collaboration = Column(
-        Boolean, default=False
-    )  # Indicates if owner wants to collaborate
-    collaboration_details = Column(
-        Text, nullable=True
-    )  # Optional details about desired collaboration
+    is_idea = Column(Boolean, default=False)
+    seeks_collaboration = Column(Boolean, default=False)
+    collaboration_details = Column(Text, nullable=True)
 
     # Added metadata columns
-    request_metadata = Column(JSONB, nullable=True)  # For storing general metadata
-    external_metadata = Column(
-        JSONB, nullable=True
-    )  # For storing external support ticket data
+    request_metadata = Column(JSONB, nullable=True)
+    external_metadata = Column(JSONB, nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="requests")

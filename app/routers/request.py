@@ -45,7 +45,6 @@ def get_public_requests(
                 "content": request.content,
                 "estimated_budget": request.estimated_budget,
                 "is_public": request.is_public,
-                "contains_sensitive_data": request.contains_sensitive_data,
                 "is_idea": request.is_idea,
                 "seeks_collaboration": request.seeks_collaboration,
                 "collaboration_details": request.collaboration_details,

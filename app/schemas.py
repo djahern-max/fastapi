@@ -605,7 +605,8 @@ class RequestBase(BaseModel):
     content: str
     estimated_budget: Optional[float] = None
     is_public: bool = False
-    contains_sensitive_data: bool = False
+    # Remove this line:
+    # contains_sensitive_data: bool = False
     is_idea: bool = False
     seeks_collaboration: bool = False
     collaboration_details: Optional[str] = None
@@ -631,7 +632,8 @@ class SimpleRequestOut(BaseModel):
     estimated_budget: Optional[int]
     created_at: datetime
     updated_at: Optional[datetime]
-    contains_sensitive_data: bool
+    # Remove this line:
+    # contains_sensitive_data: bool
     shared_with: List[RequestShareInfo] = Field(alias="shared_with_info")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
@@ -643,7 +645,8 @@ class RequestOut(BaseModel):
     content: str
     estimated_budget: Optional[float] = None
     is_public: bool
-    contains_sensitive_data: bool
+    # Remove this line:
+    # contains_sensitive_data: bool
     is_idea: bool
     seeks_collaboration: bool
     collaboration_details: Optional[str] = None
@@ -655,7 +658,7 @@ class RequestOut(BaseModel):
     updated_at: Optional[datetime] = None
     owner_username: str
     shared_with_info: List[dict] = []
-    # Add these fields:
+    # Keep these fields:
     request_metadata: Optional[Dict[str, Any]] = None
     external_metadata: Optional[Dict[str, Any]] = None
 
@@ -681,10 +684,11 @@ class RequestUpdate(BaseModel):
     project_id: Optional[int] = None
     estimated_budget: Optional[float] = None
     is_public: Optional[bool] = None
-    contains_sensitive_data: Optional[bool] = None
+    # Remove this line:
+    # contains_sensitive_data: Optional[bool] = None
     status: Optional[RequestStatus] = None
-    is_idea: Optional[bool] = None  # Add this
-    seeks_collaboration: Optional[bool] = None  # Add this
+    is_idea: Optional[bool] = None
+    seeks_collaboration: Optional[bool] = None
 
     model_config = {
         "from_attributes": True,
@@ -736,11 +740,12 @@ class SharedRequestOut(BaseModel):
     estimated_budget: Optional[float]
     created_at: datetime
     updated_at: Optional[datetime]
-    contains_sensitive_data: bool
+    # Remove this line:
+    # contains_sensitive_data: bool
     shared_with_info: List[dict] = []
     is_new: bool
     share_id: int
-    share_date: datetime  # Add this field
+    share_date: datetime
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -23,21 +23,6 @@ from app.models import Request, User
 # ------------------ Utility Functions ------------------
 
 
-def check_sensitive_content(content: str) -> bool:
-    """Check if content contains sensitive information."""
-    sensitive_patterns = [
-        r"api[_-]key",
-        r"password",
-        r"secret",
-        r"token",
-        r"access[_-]key",
-        r"private[_-]key",
-        r"auth",
-        r"credential",
-    ]
-    return any(re.search(pattern, content.lower()) for pattern in sensitive_patterns)
-
-
 def has_edit_permission(db: Session, request: models.Request, user_id: int) -> bool:
     """Check if a user has permission to edit a request."""
     return (
@@ -66,7 +51,6 @@ def create_request(db: Session, request: schemas.RequestCreate, user_id: int):
         project_id=request.project_id,
         user_id=user_id,
         is_public=request.is_public,
-        contains_sensitive_data=request.contains_sensitive_data,
         estimated_budget=request.estimated_budget,
         # Add the new fields here
         is_idea=request.is_idea,
@@ -161,14 +145,14 @@ def update_request(
 
     # Handle status update specifically
     if "status" in update_data:
-
         request.status = update_data["status"]
 
     # Handle other fields
     for field, value in update_data.items():
         if field != "status":  # Skip status as we handled it above
-            if field == "content" and value is not None:
-                request.contains_sensitive_data = check_sensitive_content(value)
+            # Remove this check:
+            # if field == "content" and value is not None:
+            #     request.contains_sensitive_data = check_sensitive_content(value)
             setattr(request, field, value)
 
     try:
@@ -185,22 +169,22 @@ def update_request(
             "status": request.status,
             "project_id": request.project_id,
             "is_public": request.is_public,
-            "contains_sensitive_data": request.contains_sensitive_data,
+            # Remove this line:
+            # "contains_sensitive_data": request.contains_sensitive_data,
             "estimated_budget": request.estimated_budget,
             "created_at": request.created_at,
             "updated_at": request.updated_at,
             "owner_username": owner.username,
             "shared_with_info": [],
-            "is_idea": request.is_idea,  # Add this
-            "seeks_collaboration": request.seeks_collaboration,  # Add this
-            "collaboration_details": request.collaboration_details,  # Add this too for completeness
+            "is_idea": request.is_idea,
+            "seeks_collaboration": request.seeks_collaboration,
+            "collaboration_details": request.collaboration_details,
         }
 
         return response_dict
 
     except Exception as e:
         db.rollback()
-
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -210,7 +194,7 @@ def update_request(
 def share_request(
     db: Session, request_id: int, user_id: int, share: schemas.RequestShare
 ):
-    """Share a request with another user, ensuring no sensitive data is shared."""
+    """Share a request with another user."""  # Updated comment
     request = get_request_by_id(db, request_id)
     if not request:
         raise HTTPException(status_code=404, detail="Request not found")
@@ -220,10 +204,11 @@ def share_request(
             status_code=403, detail="Not authorized to share this request"
         )
 
-    if request.contains_sensitive_data:
-        raise HTTPException(
-            status_code=400, detail="Cannot share requests containing sensitive data"
-        )
+    # Remove this check:
+    # if request.contains_sensitive_data:
+    #     raise HTTPException(
+    #         status_code=400, detail="Cannot share requests containing sensitive data"
+    #     )
 
     existing_share = (
         db.query(models.RequestShare)
