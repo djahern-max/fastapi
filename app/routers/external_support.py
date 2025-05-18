@@ -122,7 +122,6 @@ def create_external_support_ticket(
             user_id=system_user.id,
             status="open",
             is_public=True,
-            contains_sensitive_data=False,
             is_idea=False,
             seeks_collaboration=False,
             estimated_budget=None,

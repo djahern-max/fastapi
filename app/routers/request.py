@@ -110,7 +110,6 @@ def get_shared_requests(
             "estimated_budget": request.estimated_budget,
             "created_at": request.created_at,
             "updated_at": request.updated_at,
-            "contains_sensitive_data": request.contains_sensitive_data,
             "shared_with_info": [],
             "is_new": viewed_at is None,
             "share_id": share_id,
