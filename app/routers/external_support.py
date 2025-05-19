@@ -39,7 +39,7 @@ def create_external_support_ticket(
     Create a new support ticket from an external source (e.g., Analytics Hub)
 
     This endpoint is protected by an API key and creates a new support ticket
-    in the RYZE.ai system as a public request.
+    in the ABACADABA.com system as a public request.
     """
     logger.info(
         f"Received external support ticket from {ticket.source} for {ticket.email}"
@@ -48,7 +48,9 @@ def create_external_support_ticket(
     try:
         # Try to find the system service account
         system_user = (
-            db.query(models.User).filter(models.User.email == "system@ryze.ai").first()
+            db.query(models.User)
+            .filter(models.User.email == "system@abacadaba.com")
+            .first()
         )
 
         # If no system user exists, create one
@@ -65,8 +67,8 @@ def create_external_support_ticket(
             # Create the system user
             system_user = models.User(
                 username="system",
-                email="system@ryze.ai",
-                full_name="RYZE System",
+                email="system@abacadaba.com",
+                full_name="ABACADABA System",
                 password=hashed_password,
                 is_active=True,
                 terms_accepted=True,
@@ -297,7 +299,9 @@ def add_external_message(
 
     # Get or create the system user for sending the message
     system_user = (
-        db.query(models.User).filter(models.User.email == "system@ryze.ai").first()
+        db.query(models.User)
+        .filter(models.User.email == "system@abacadaba.com")
+        .first()
     )
 
     if not system_user:

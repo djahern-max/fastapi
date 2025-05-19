@@ -147,18 +147,31 @@ def display_videos(
 @router.get("/my-videos", response_model=schemas.VideoResponse)
 def get_user_videos(
     db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(oauth2.get_current_user),
+    current_user: Optional[models.User] = Depends(
+        oauth2.get_optional_user
+    ),  # Use optional authentication
 ):
     try:
-        user_videos = (
-            db.query(models.Video).filter(models.Video.user_id == current_user.id).all()
-        )
-        other_videos = (
-            db.query(models.Video).filter(models.Video.user_id != current_user.id).all()
-        )
+        # If user is authenticated, show their videos
+        if current_user:
+            user_videos = (
+                db.query(models.Video)
+                .filter(models.Video.user_id == current_user.id)
+                .all()
+            )
+            other_videos = (
+                db.query(models.Video)
+                .filter(models.Video.user_id != current_user.id)
+                .all()
+            )
+        else:
+            # For unauthenticated users, show empty user_videos and all videos as other_videos
+            user_videos = []
+            other_videos = db.query(models.Video).all()
+
         return schemas.VideoResponse(user_videos=user_videos, other_videos=other_videos)
     except Exception as e:
-
+        logger.exception("Error in get_user_videos endpoint:")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

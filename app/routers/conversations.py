@@ -119,7 +119,7 @@ async def create_message(  # Make this async
             if not request:
                 raise HTTPException(status_code=404, detail="Related request not found")
 
-            is_system = current_user.email == "system@ryze.ai"
+            is_system = current_user.email == "system@abacadaba.com"
 
             is_assigned = (
                 db.query(models.SnaggedRequest)
@@ -661,7 +661,7 @@ def get_conversation(
         if not request:
             raise HTTPException(status_code=404, detail="Related request not found")
 
-        is_system = current_user.email == "system@ryze.ai"
+        is_system = current_user.email == "system@abacadaba.com"
 
         is_assigned = (
             db.query(models.SnaggedRequest)
@@ -720,7 +720,7 @@ async def transmit_message(
     db: Session = Depends(get_db),
     current_user=Depends(oauth2.get_current_user),
 ):
-    """Transmit a message from RYZE.ai to Analytics Hub"""
+    """Transmit a message from ABACADABA.com to Analytics Hub"""
 
     # Get the conversation
     conversation = (
@@ -781,7 +781,7 @@ async def transmit_message(
     db: Session = Depends(get_db),
     current_user=Depends(oauth2.get_current_user),
 ):
-    """Transmit a message from RYZE.ai to Analytics Hub"""
+    """Transmit a message from ABACADABA.com to Analytics Hub"""
     try:
         # Get the message
         message = (
