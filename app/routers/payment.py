@@ -609,6 +609,9 @@ async def create_donation_session(
                         "product_data": {
                             "name": "Donation to ABACADABA.com",
                             "description": "Thank you for supporting ABACADABA.com!",
+                            "images": [
+                                "https://abacadaba.com/donation-image.png"
+                            ],  # Optional: Add an image for the product
                         },
                     },
                     "quantity": 1,
@@ -619,6 +622,43 @@ async def create_donation_session(
             cancel_url=f"{settings.frontend_url}/donation/cancel",
             metadata=metadata,
             submit_type="donate",
+            # Enhanced customization options
+            custom_text={
+                "submit": {
+                    "message": "Your donation helps us build better tools for developers!"
+                },
+                "total": {
+                    "message": "100% of your donation goes to developing new features"
+                },
+            },
+            # Collect additional information (optional)
+            custom_fields=[
+                {
+                    "key": "reason",
+                    "label": {
+                        "type": "custom",
+                        "custom": "What inspired you to donate?",
+                    },
+                    "type": "text",
+                    "optional": True,
+                }
+            ],
+            # Enhanced appearance settings
+            payment_intent_data={
+                "description": "Donation to ABACADABA Developer Platform",
+                "statement_descriptor": "ABACADABA DONATION",
+                "statement_descriptor_suffix": "THANK YOU",
+            },
+            # Billing address collection for better fraud prevention
+            billing_address_collection="auto",
+            # Customer creation for easier repeat donations
+            customer_creation="always",
+            # Allow promotional codes (if you set up any discount codes)
+            allow_promotion_codes=True,
+            # Locale based on user preference (you can pass this from frontend)
+            locale="auto",
+            # Shipping address collection (set to 'none' for donations)
+            shipping_address_collection=None,
         )
 
         try:
