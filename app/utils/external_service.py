@@ -20,7 +20,7 @@ async def send_message_to_analytics_hub(
     external_source: Optional[str] = "analytics-hub",
 ) -> bool:
     """
-    Send a message from ABACADABA.com to Analytics Hub
+    Send a message from ireallycode.com to Analytics Hub
 
     Args:
         db: Database session

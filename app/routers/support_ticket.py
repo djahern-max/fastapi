@@ -22,7 +22,7 @@ async def add_ticket_message(
     api_key: Optional[str] = Header(None, alias="X-API-Key"),
 ):
     """
-    Add a message to a support ticket from ABACADABA.COM
+    Add a message to a support ticket from ireallycode.COM
     """
     # Validate API key if present (for system-to-system communication)
     if api_key:

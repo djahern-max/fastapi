@@ -263,8 +263,8 @@ async def create_payment_intent(
                     "created_at": datetime.now(timezone("UTC")).isoformat(),
                 },
                 description=f"Payment for user {current_user.email}",
-                statement_descriptor="ABACADABA PAYMENT",
-                statement_descriptor_suffix="ABACADABA",
+                statement_descriptor="ireallycode PAYMENT",
+                statement_descriptor_suffix="ireallycode",
                 capture_method="automatic",
             )
 
@@ -607,8 +607,8 @@ async def create_donation_session(
                         "currency": currency,
                         "unit_amount": amount,
                         "product_data": {
-                            "name": "Donation to ABACADABA.com",
-                            "description": "Thank you for supporting ABACADABA.com!",
+                            "name": "Donation to ireallycode.com",
+                            "description": "Thank you for supporting ireallycode.com!",
                         },
                     },
                     "quantity": 1,

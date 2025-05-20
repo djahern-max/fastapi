@@ -84,8 +84,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     lifespan=lifespan,
-    title="ABACADABA API",
-    description="API for ABACABADABA platform",
+    title="ireallycode API",
+    description="API for ireallycode platform",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",

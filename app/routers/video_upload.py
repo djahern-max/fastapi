@@ -182,7 +182,7 @@ async def generate_share_link(
     db.commit()
 
     base_url = (
-        "https://www.abacadaba.com"
+        "https://www.ireallycode.com"
         if os.getenv("ENV") == "production"
         else "http://localhost:3000"
     )
