@@ -607,8 +607,8 @@ async def create_donation_session(
                         "currency": currency,
                         "unit_amount": amount,
                         "product_data": {
-                            "name": "Donation to ireallycode.com",
-                            "description": "Thank you for supporting ireallycode.com!",
+                            "name": "Donation to ryze.ai",
+                            "description": "Thank you for supporting ryze.ai!",
                         },
                     },
                     "quantity": 1,

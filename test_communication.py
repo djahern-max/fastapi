@@ -58,9 +58,7 @@ async def test_message_sending():
     developer = db.query(User).filter(User.user_type == "developer").first()
     if not developer:
         print("No developer user found. Using system user.")
-        developer = (
-            db.query(User).filter(User.email == "system@ireallycode.com").first()
-        )
+        developer = db.query(User).filter(User.email == "system@ryze.ai").first()
         if not developer:
             print("No system user found. Cannot proceed.")
             return

@@ -182,7 +182,7 @@ async def generate_share_link(
     db.commit()
 
     base_url = (
-        "https://www.ireallycode.com"
+        "https://www.ryze.ai"
         if os.getenv("ENV") == "production"
         else "http://localhost:3000"
     )
