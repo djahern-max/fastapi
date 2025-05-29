@@ -438,6 +438,8 @@ def get_public_developers(
 ):
     """Get list of public developer profiles with optional filtering"""
     try:
+        from ..utils.ryze_scoring import RyzeScoring
+        
         # Base query with proper joins
         query = (
             db.query(models.DeveloperProfile)
@@ -455,14 +457,23 @@ def get_public_developers(
                 models.DeveloperProfile.experience_years >= min_experience
             )
 
-        # Execute query with pagination
-        developers = query.offset(skip).limit(limit).all()
+        # Execute query with pagination and sort by success rate (RYZE score)
+        developers = query.order_by(models.DeveloperProfile.success_rate.desc()).offset(skip).limit(limit).all()
 
-        # Debug logging
+        # Ensure all developers have up-to-date RYZE scores
+        for developer in developers:
+            if developer.success_rate is None or developer.success_rate == 0:
+                # Calculate RYZE score if it's missing or zero
+                try:
+                    ryze_data = RyzeScoring.update_developer_ryze_score(db, developer.id)
+                    logger.info(f"Updated RYZE score for developer {developer.user_id}: {ryze_data['success_rate']}%")
+                except Exception as e:
+                    logger.error(f"Error updating RYZE score for developer {developer.id}: {str(e)}")
+
         logger.info(f"Found {len(developers)} public developers")
         if developers:
             logger.debug(
-                f"First developer: {developers[0].id}, User: {developers[0].user.username if developers[0].user else 'No user'}"
+                f"First developer: {developers[0].id}, User: {developers[0].user.username if developers[0].user else 'No user'}, Success Rate: {developers[0].success_rate}%"
             )
 
         return developers
@@ -473,7 +484,7 @@ def get_public_developers(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching public developers: {str(e)}",
-        )
+        ))
 
 
 @router.get("/check-profile", response_model=schemas.ProfileCheckResponse)

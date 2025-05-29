@@ -9,31 +9,74 @@ from fastapi import Body
 router = APIRouter(prefix="/profile", tags=["Profile"])
 
 
-@router.get("/developers/public", response_model=List[schemas.DeveloperProfilePublic])
+@router.get("/developers/public", response_model=list[schemas.DeveloperProfilePublic])
 def get_public_developers(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(database.get_db),
+    skip: int = 0,
+    limit: int = 500,
     skills: Optional[str] = None,
     min_experience: Optional[int] = None,
-    db: Session = Depends(database.get_db),
 ):
     """Get list of public developer profiles with optional filtering"""
-    query = db.query(models.DeveloperProfile).filter(
-        models.DeveloperProfile.is_public == True
-    )
+    try:
+        from ..utils.ryze_scoring import RyzeScoring
 
-    if skills:
-        query = query.filter(models.DeveloperProfile.skills.ilike(f"%{skills}%"))
+        # Base query with proper joins
+        query = (
+            db.query(models.DeveloperProfile)
+            .join(models.User, models.DeveloperProfile.user_id == models.User.id)
+            .filter(models.DeveloperProfile.is_public == True)
+            .options(joinedload(models.DeveloperProfile.user))
+        )
 
-    if min_experience is not None:
-        query = query.filter(models.DeveloperProfile.experience_years >= min_experience)
+        # Apply filters if provided
+        if skills:
+            query = query.filter(models.DeveloperProfile.skills.ilike(f"%{skills}%"))
 
-    # Order by rating and success factor (rate)
-    query = query.order_by(
-        desc(models.DeveloperProfile.rating), desc(models.DeveloperProfile.success_rate)
-    )
+        if min_experience is not None:
+            query = query.filter(
+                models.DeveloperProfile.experience_years >= min_experience
+            )
 
-    return query.offset(skip).limit(limit).all()
+        # Execute query with pagination and sort by success rate (RYZE score)
+        developers = (
+            query.order_by(models.DeveloperProfile.success_rate.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+        # Ensure all developers have up-to-date RYZE scores
+        for developer in developers:
+            if developer.success_rate is None or developer.success_rate == 0:
+                # Calculate RYZE score if it's missing or zero
+                try:
+                    ryze_data = RyzeScoring.update_developer_ryze_score(
+                        db, developer.id
+                    )
+                    logger.info(
+                        f"Updated RYZE score for developer {developer.user_id}: {ryze_data['success_rate']}%"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error updating RYZE score for developer {developer.id}: {str(e)}"
+                    )
+
+        logger.info(f"Found {len(developers)} public developers")
+        if developers:
+            logger.debug(
+                f"First developer: {developers[0].id}, User: {developers[0].user.username if developers[0].user else 'No user'}, Success Rate: {developers[0].success_rate}%"
+            )
+
+        return developers
+
+    except Exception as e:
+        logger.error(f"Error fetching public developers: {str(e)}")
+        logger.error(f"Exception type: {type(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching public developers: {str(e)}",
+        )
 
 
 @router.get(
