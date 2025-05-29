@@ -439,7 +439,7 @@ def get_public_developers(
     """Get list of public developer profiles with optional filtering"""
     try:
         from ..utils.ryze_scoring import RyzeScoring
-        
+
         # Base query with proper joins
         query = (
             db.query(models.DeveloperProfile)
@@ -458,17 +458,28 @@ def get_public_developers(
             )
 
         # Execute query with pagination and sort by success rate (RYZE score)
-        developers = query.order_by(models.DeveloperProfile.success_rate.desc()).offset(skip).limit(limit).all()
+        developers = (
+            query.order_by(models.DeveloperProfile.success_rate.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
 
         # Ensure all developers have up-to-date RYZE scores
         for developer in developers:
             if developer.success_rate is None or developer.success_rate == 0:
                 # Calculate RYZE score if it's missing or zero
                 try:
-                    ryze_data = RyzeScoring.update_developer_ryze_score(db, developer.id)
-                    logger.info(f"Updated RYZE score for developer {developer.user_id}: {ryze_data['success_rate']}%")
+                    ryze_data = RyzeScoring.update_developer_ryze_score(
+                        db, developer.id
+                    )
+                    logger.info(
+                        f"Updated RYZE score for developer {developer.user_id}: {ryze_data['success_rate']}%"
+                    )
                 except Exception as e:
-                    logger.error(f"Error updating RYZE score for developer {developer.id}: {str(e)}")
+                    logger.error(
+                        f"Error updating RYZE score for developer {developer.id}: {str(e)}"
+                    )
 
         logger.info(f"Found {len(developers)} public developers")
         if developers:
@@ -484,7 +495,7 @@ def get_public_developers(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching public developers: {str(e)}",
-        ))
+        )
 
 
 @router.get("/check-profile", response_model=schemas.ProfileCheckResponse)
