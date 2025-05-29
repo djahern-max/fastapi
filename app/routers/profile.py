@@ -11,6 +11,7 @@ import logging
 from ..oauth2 import get_current_user
 from sqlalchemy.orm import joinedload
 from fastapi.responses import JSONResponse
+from typing import Optional
 
 
 # Initialize logger
