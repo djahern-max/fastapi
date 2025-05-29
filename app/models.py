@@ -447,30 +447,49 @@ class ShowcaseContentLink(Base):
 # ------------------ Profile Models ------------------
 class DeveloperProfile(Base):
     __tablename__ = "developer_profiles"
-    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+
+    # Basic fields (existing)
     skills = Column(String)
     experience_years = Column(Integer)
-    bio = Column(Text, nullable=True)
+    bio = Column(Text)
+    is_public = Column(Boolean, default=False)
+    profile_image_url = Column(String)
+    rating = Column(Float)
+    total_projects = Column(Integer, default=0)
+    success_rate = Column(Float, default=0.0)
     created_at = Column(
-        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("now()"), nullable=False
     )
 
-    # Profile visibility and display
-    is_public = Column(Boolean, default=False)
-    profile_image_url = Column(String, nullable=True)
+    # Extended fields (new)
+    professional_title = Column(String, default="Software Developer")
 
-    # Success metrics
-    rating = Column(Float, nullable=True)  # Average rating from clients
-    total_projects = Column(Integer, default=0)
-    success_rate = Column(Float, default=0.0)  # Percentage of successful projects
+    # Location fields
+    city = Column(String)
+    state = Column(String)
+    zip_code = Column(String)
 
-    # Relationship
+    # Contact fields
+    phone = Column(String)
+    contact_email = Column(String)
+
+    # JSON fields for complex data
+    social_links = Column(
+        JSONB
+    )  # Store as JSON: {"linkedin": "url", "github": "url", etc.}
+    work_experiences = Column(JSONB)  # Store as JSON array
+    educations = Column(JSONB)  # Store as JSON array
+    certifications = Column(JSONB)  # Store as JSON array
+    portfolio_items = Column(JSONB)  # Store as JSON array
+
+    # Relationships (existing)
     user = relationship("User", back_populates="developer_profile")
-
-    ratings = relationship("DeveloperRating", back_populates="developer")
+    ratings = relationship(
+        "DeveloperRating", back_populates="developer", cascade="all, delete-orphan"
+    )
 
 
 class ClientProfile(Base):

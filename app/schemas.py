@@ -243,12 +243,91 @@ class Achievement(BaseModel):
     url: Optional[str] = None
 
 
-# Then modify the profile models to use Dict instead of the custom types for now
+# First, add the nested models for complex data structures
+class SocialLinks(BaseModel):
+    linkedin: Optional[str] = None
+    github: Optional[str] = None
+    twitter: Optional[str] = None
+    website: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkExperience(BaseModel):
+    company: str
+    position: str
+    start_date: str  # or datetime if you prefer
+    end_date: Optional[str] = None
+    is_current: bool = False
+    location: Optional[str] = None
+    description: Optional[str] = None
+    responsibilities: List[str] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Education(BaseModel):
+    degree: str
+    institution: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    location: Optional[str] = None
+    description: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Certification(BaseModel):
+    name: str
+    issuing_organization: Optional[str] = None
+    issue_date: Optional[str] = None
+    expiration_date: Optional[str] = None
+    credential_id: Optional[str] = None
+    credential_url: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PortfolioItem(BaseModel):
+    title: str
+    description: Optional[str] = None
+    technologies: List[str] = []
+    project_url: Optional[str] = None
+    repository_url: Optional[str] = None
+    completion_date: Optional[str] = None
+    is_featured: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Updated Developer Profile Schemas
 class DeveloperProfileCreate(BaseModel):
+    # Basic information
     skills: str
     experience_years: int = Field(ge=0)
     bio: Optional[str] = None
     is_public: bool = False
+
+    # Extended fields
+    professional_title: Optional[str] = "Software Developer"
+
+    # Location
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+
+    # Contact
+    phone: Optional[str] = None
+    contact_email: Optional[str] = None
+
+    # Social links
+    social_links: Optional[Dict[str, str]] = {}
+
+    # Experience and education (stored as JSON)
+    work_experiences: Optional[List[Dict]] = []
+    educations: Optional[List[Dict]] = []
+    certifications: Optional[List[Dict]] = []
+    portfolio_items: Optional[List[Dict]] = []
 
 
 class ClientProfileCreate(BaseModel):
@@ -259,12 +338,34 @@ class ClientProfileCreate(BaseModel):
 
 
 class DeveloperProfileUpdate(BaseModel):
+    # Basic fields
     skills: Optional[str] = None
     experience_years: Optional[int] = Field(None, ge=0)
     bio: Optional[str] = None
     is_public: Optional[bool] = None
     profile_image_url: Optional[str] = None
     total_projects: Optional[int] = Field(None, ge=0)
+
+    # Extended fields
+    professional_title: Optional[str] = None
+
+    # Location
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+
+    # Contact
+    phone: Optional[str] = None
+    contact_email: Optional[str] = None
+
+    # Social links
+    social_links: Optional[Dict[str, str]] = None
+
+    # Experience and education
+    work_experiences: Optional[List[Dict]] = None
+    educations: Optional[List[Dict]] = None
+    certifications: Optional[List[Dict]] = None
+    portfolio_items: Optional[List[Dict]] = None
 
 
 class DeveloperProfilePublic(BaseModel):
@@ -291,6 +392,7 @@ class ClientProfileUpdate(BaseModel):
 
 
 class DeveloperProfileOut(BaseModel):
+    # Existing fields
     id: int
     user_id: int
     skills: str
@@ -303,9 +405,32 @@ class DeveloperProfileOut(BaseModel):
     success_rate: float
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    # Extended fields
+    professional_title: Optional[str] = "Software Developer"
+
+    # Location
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+
+    # Contact
+    phone: Optional[str] = None
+    contact_email: Optional[str] = None
+
+    # Social links
+    social_links: Optional[Dict[str, str]] = {}
+
+    # Experience and education
+    work_experiences: Optional[List[Dict]] = []
+    educations: Optional[List[Dict]] = []
+    certifications: Optional[List[Dict]] = []
+    portfolio_items: Optional[List[Dict]] = []
+
+    # Rating fields
     ratings: Optional[List[DeveloperRatingOut]] = None
     average_rating: Optional[float] = Field(None, ge=0, le=5)
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClientProfileOut(BaseModel):
