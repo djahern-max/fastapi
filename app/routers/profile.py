@@ -428,18 +428,35 @@ async def upload_profile_image(
 
 
 @router.get("/developers/public", response_model=list[schemas.DeveloperProfilePublic])
-def get_public_developers(db: Session = Depends(database.get_db)):
-    """Get all public developer profiles with their user information"""
+def get_public_developers(
+    db: Session = Depends(database.get_db),
+    skip: int = 0,
+    limit: int = 100,
+    skills: Optional[str] = None,
+    min_experience: Optional[int] = None,
+):
+    """Get all public developer profiles with their user information and optional filtering"""
     try:
-        developers = (
+        query = (
             db.query(models.DeveloperProfile)
             .join(models.User)  # Join with the User table
             .filter(models.DeveloperProfile.is_public == True)
             .options(
                 joinedload(models.DeveloperProfile.user)
             )  # Fixed joinedload syntax
-            .all()
         )
+
+        # Apply filters if provided
+        if skills:
+            # Case-insensitive search for skills
+            query = query.filter(models.DeveloperProfile.skills.ilike(f"%{skills}%"))
+
+        if min_experience is not None:
+            query = query.filter(
+                models.DeveloperProfile.experience_years >= min_experience
+            )
+
+        developers = query.offset(skip).limit(limit).all()
         return developers
     except Exception as e:
         raise HTTPException(

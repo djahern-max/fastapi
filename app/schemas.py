@@ -371,7 +371,7 @@ class DeveloperProfileUpdate(BaseModel):
 class DeveloperProfilePublic(BaseModel):
     id: int
     user_id: int
-    user: UserBasic  # Add this line to include user information
+    user: UserBasic  # Include user information
     skills: str
     experience_years: int
     bio: Optional[str] = None
@@ -380,6 +380,31 @@ class DeveloperProfilePublic(BaseModel):
     total_projects: int
     success_rate: float
     created_at: datetime
+
+    # Extended fields - add all the missing ones
+    professional_title: Optional[str] = "Software Developer"
+
+    # Location
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+
+    # Contact
+    phone: Optional[str] = None
+    contact_email: Optional[str] = None
+
+    # Social links
+    social_links: Optional[Dict[str, str]] = {}
+
+    # Experience and education
+    work_experiences: Optional[List[Dict]] = []
+    educations: Optional[List[Dict]] = []
+    certifications: Optional[List[Dict]] = []
+    portfolio_items: Optional[List[Dict]] = []
+
+    # Rating fields
+    ratings: Optional[List[DeveloperRatingOut]] = None
+    average_rating: Optional[float] = Field(None, ge=0, le=5)
 
     model_config = ConfigDict(from_attributes=True)
 
