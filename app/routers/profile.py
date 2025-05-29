@@ -431,24 +431,22 @@ async def upload_profile_image(
 def get_public_developers(
     db: Session = Depends(database.get_db),
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 500,
     skills: Optional[str] = None,
     min_experience: Optional[int] = None,
 ):
-    """Get all public developer profiles with their user information and optional filtering"""
+    """Get list of public developer profiles with optional filtering"""
     try:
+        # Base query with proper joins
         query = (
             db.query(models.DeveloperProfile)
-            .join(models.User)  # Join with the User table
+            .join(models.User, models.DeveloperProfile.user_id == models.User.id)
             .filter(models.DeveloperProfile.is_public == True)
-            .options(
-                joinedload(models.DeveloperProfile.user)
-            )  # Fixed joinedload syntax
+            .options(joinedload(models.DeveloperProfile.user))
         )
 
         # Apply filters if provided
         if skills:
-            # Case-insensitive search for skills
             query = query.filter(models.DeveloperProfile.skills.ilike(f"%{skills}%"))
 
         if min_experience is not None:
@@ -456,9 +454,21 @@ def get_public_developers(
                 models.DeveloperProfile.experience_years >= min_experience
             )
 
+        # Execute query with pagination
         developers = query.offset(skip).limit(limit).all()
+
+        # Debug logging
+        logger.info(f"Found {len(developers)} public developers")
+        if developers:
+            logger.debug(
+                f"First developer: {developers[0].id}, User: {developers[0].user.username if developers[0].user else 'No user'}"
+            )
+
         return developers
+
     except Exception as e:
+        logger.error(f"Error fetching public developers: {str(e)}")
+        logger.error(f"Exception type: {type(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching public developers: {str(e)}",
