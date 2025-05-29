@@ -196,8 +196,10 @@ class DeveloperRatingBase(BaseModel):
 
 
 class DeveloperRatingCreate(BaseModel):
-    stars: int = Field(ge=1, le=5)
-    comment: Optional[str] = None
+    stars: int = Field(ge=1, le=5, description="Rating from 1 to 5 stars")
+    comment: Optional[str] = Field(
+        None, max_length=1000, description="Optional comment about the developer"
+    )
 
 
 class DeveloperRatingUpdate(BaseModel):
@@ -212,6 +214,7 @@ class DeveloperRatingOut(BaseModel):
     stars: int
     comment: Optional[str] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

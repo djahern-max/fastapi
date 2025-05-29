@@ -13,6 +13,7 @@ from ..schemas import (
 )
 from sqlalchemy import func
 import logging
+from ..utils.ryze_scoring import RyzeScoring
 
 logger = logging.getLogger(__name__)
 
@@ -97,13 +98,16 @@ async def rate_developer(
             )
             action = "added"
 
-        # Get updated statistics
-        stats = get_developer_rating_stats_helper(db, developer_profile.id)
+        # Update RYZE Score after rating is added/updated
+        ryze_data = RyzeScoring.update_developer_ryze_score(db, developer_profile.id)
+        logger.info(f"Updated RYZE score for developer {user_id}: {ryze_data}")
 
         return RatingResponse(
             success=True,
-            average_rating=stats.average_rating,
-            total_ratings=stats.total_ratings,
+            average_rating=ryze_data[
+                "ryze_score"
+            ],  # Return RYZE score instead of raw average
+            total_ratings=ryze_data["total_ratings"],
             message=f"Rating {action} successfully",
         )
 
@@ -138,7 +142,10 @@ async def get_developer_rating_stats(
                 detail="Developer profile not found",
             )
 
+        # Use the helper function to get comprehensive stats
         stats = get_developer_rating_stats_helper(db, developer_profile.id)
+
+        # The stats will now include the RYZE score as the average_rating
         return stats
 
     except HTTPException:
@@ -199,8 +206,11 @@ async def get_user_developer_rating(
 def get_developer_rating_stats_helper(
     db: Session, developer_profile_id: int
 ) -> DeveloperRatingStats:
-    """Helper function to calculate rating statistics for a developer profile"""
-    # Get rating statistics
+    """
+    Helper function to calculate rating statistics for a developer profile
+    Now returns RYZE score instead of raw average rating
+    """
+    # Get raw rating statistics
     stats = (
         db.query(
             func.avg(DeveloperRating.stars).label("average"),
@@ -210,7 +220,13 @@ def get_developer_rating_stats_helper(
         .first()
     )
 
-    # Get rating distribution
+    raw_average = float(stats.average) if stats.average else 0.0
+    total_ratings = stats.total
+
+    # Calculate RYZE score using Bayesian Average
+    ryze_score = RyzeScoring.bayesian_average(raw_average, total_ratings)
+
+    # Get rating distribution (this remains the same for detailed analytics)
     distribution = dict.fromkeys(range(1, 6), 0)
     ratings = (
         db.query(DeveloperRating.stars, func.count(DeveloperRating.id))
@@ -223,7 +239,66 @@ def get_developer_rating_stats_helper(
         distribution[rating] = count
 
     return DeveloperRatingStats(
-        average_rating=float(stats.average) if stats.average else 0.0,
-        total_ratings=stats.total,
+        average_rating=ryze_score,  # Return RYZE score instead of raw average
+        total_ratings=total_ratings,
         rating_distribution=distribution,
     )
+
+
+@router.get("/developer/{user_id}/ryze-score")
+async def get_developer_ryze_score(
+    user_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Get detailed RYZE score information for a developer
+    This endpoint provides both the RYZE score and success rate percentage
+    """
+    try:
+        # Get the developer profile
+        developer_profile = (
+            db.query(DeveloperProfile)
+            .filter(DeveloperProfile.user_id == user_id)
+            .first()
+        )
+
+        if not developer_profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Developer profile not found",
+            )
+
+        # Get raw statistics
+        stats = (
+            db.query(
+                func.avg(DeveloperRating.stars).label("average"),
+                func.count(DeveloperRating.id).label("total"),
+            )
+            .filter(DeveloperRating.developer_id == developer_profile.id)
+            .first()
+        )
+
+        raw_average = float(stats.average) if stats.average else 0.0
+        total_ratings = stats.total
+
+        # Calculate RYZE metrics
+        ryze_score = RyzeScoring.bayesian_average(raw_average, total_ratings)
+        success_rate = RyzeScoring.calculate_success_rate(raw_average, total_ratings)
+
+        return {
+            "user_id": user_id,
+            "raw_average_rating": raw_average,
+            "total_ratings": total_ratings,
+            "ryze_score": ryze_score,
+            "success_rate_percentage": success_rate,
+            "explanation": f"RYZE Score combines rating quality ({raw_average:.1f}/5) with quantity ({total_ratings} ratings) to fairly rank developers",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting RYZE score for developer {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while fetching RYZE score",
+        )
