@@ -196,7 +196,7 @@ class DeveloperRatingBase(BaseModel):
 
 
 class DeveloperRatingCreate(BaseModel):
-    stars: int
+    stars: int = Field(ge=1, le=5)
     comment: Optional[str] = None
 
 
@@ -208,18 +208,19 @@ class DeveloperRatingUpdate(BaseModel):
 class DeveloperRatingOut(BaseModel):
     id: int
     developer_id: int
-    user_id: int  # Changed from client_id
+    user_id: int
     stars: int
     comment: Optional[str] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True
 
 
 class DeveloperRatingStats(BaseModel):
-    average_rating: float
-    total_ratings: int
-    rating_distribution: Dict[int, int]
+    average_rating: float = 0.0
+    total_ratings: int = 0
+    rating_distribution: Dict[int, int] = {}
 
 
 class RatingResponse(BaseModel):
