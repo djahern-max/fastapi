@@ -128,7 +128,7 @@ async def upload_video(  # ORIGINAL NAME - DON'T CHANGE THIS
     video_type: VideoType = Form(VideoType.solution_demo),
     file: UploadFile = File(...),
     thumbnail: UploadFile = File(None),
-    compress: bool = Form(True),  # NEW: Allow skipping compression
+    compress: bool = Form(False),  # NEW: Allow skipping compression
     compression_level: str = Form("medium"),  # NEW: fast, medium, slow
     db: Session = Depends(get_db),
     current_user: User = Depends(oauth2.get_current_user),
