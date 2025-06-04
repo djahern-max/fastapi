@@ -42,7 +42,6 @@ s3 = boto3.client(
 router = APIRouter(prefix="/videos", tags=["Videos"])
 
 
-@router.post("/")
 def upload_to_s3_optimized(file_path, s3_key, content_type):
     """Optimized S3 upload with multipart for large files"""
     try:
@@ -117,6 +116,7 @@ def upload_to_s3_optimized(file_path, s3_key, content_type):
         raise e
 
 
+@router.post("/")
 async def upload_video(
     title: str = Form(...),
     description: str = Form(None),
