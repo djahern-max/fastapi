@@ -1,121 +1,49 @@
-# app/routers/video_upload.py - Optimized version
-
+# Standard library imports
 import os
 import uuid
 import logging
-import asyncio
-from typing import Optional
-from pathlib import Path
+from typing import Optional, Dict, Any
 
+# Third-party imports
 import boto3
-from botocore.config import Config
-from fastapi import (
-    APIRouter,
-    UploadFile,
-    File,
-    Depends,
-    HTTPException,
-    Form,
-    BackgroundTasks,
-)
-from fastapi.responses import JSONResponse
+from botocore.exceptions import NoCredentialsError, ClientError
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Form, status
 from sqlalchemy.orm import Session
 
+# Application imports
 from app.database import get_db
 from app.models import Video, VideoType, User
-from app import oauth2
+from app.schemas import VideoCreate, VideoOut, VideoUpdate
+from app import models, oauth2
+from app.utils.video_processor import compress_video
 from datetime import datetime
 
+
+# Initialize the logger
 logger = logging.getLogger(__name__)
 
-# Optimized S3 client with better configuration
-s3_config = Config(
-    region_name=os.getenv("SPACES_REGION"),
-    retries={"max_attempts": 3, "mode": "adaptive"},
-    max_pool_connections=50,
-    # Use multipart uploads for files > 100MB
-    multipart_threshold=1024 * 1024 * 100,  # 100MB
-    multipart_chunksize=1024 * 1024 * 100,  # 100MB chunks
-)
+# Load environment variables
+SPACES_NAME = os.getenv("SPACES_NAME")
+SPACES_REGION = os.getenv("SPACES_REGION")
+SPACES_ENDPOINT = os.getenv("SPACES_ENDPOINT")
+SPACES_BUCKET = os.getenv("SPACES_BUCKET")
+SPACES_KEY = os.getenv("SPACES_KEY")
+SPACES_SECRET = os.getenv("SPACES_SECRET")
 
+# Initialize the boto3 client for DigitalOcean Spaces
 s3 = boto3.client(
     "s3",
-    endpoint_url=os.getenv("SPACES_ENDPOINT"),
-    aws_access_key_id=os.getenv("SPACES_KEY"),
-    aws_secret_access_key=os.getenv("SPACES_SECRET"),
-    config=s3_config,
+    region_name=SPACES_REGION,
+    endpoint_url=SPACES_ENDPOINT,
+    aws_access_key_id=SPACES_KEY,
+    aws_secret_access_key=SPACES_SECRET,
 )
 
 router = APIRouter(prefix="/videos", tags=["Videos"])
 
 
-async def upload_to_spaces_async(file_path: str, key: str, content_type: str = None):
-    """Async upload to Digital Ocean Spaces"""
-
-    def _upload():
-        with open(file_path, "rb") as file_obj:
-            s3.upload_fileobj(
-                file_obj,
-                os.getenv("SPACES_BUCKET"),
-                key,
-                ExtraArgs={
-                    "ACL": "public-read",
-                    "ContentType": content_type or "video/mp4",
-                },
-            )
-
-    # Run the blocking upload in a thread pool
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _upload)
-
-    return f"https://{os.getenv('SPACES_BUCKET')}.{os.getenv('SPACES_REGION')}.digitaloceanspaces.com/{key}"
-
-
-async def process_video_background(
-    file_path: str, video_id: int, db_session: Session, compress: bool = True
-):
-    """Background task for video processing"""
-    try:
-        if compress:
-            # Import here to avoid startup overhead
-            from app.utils.video_processor import compress_video
-
-            logger.info(f"Starting compression for video {video_id}")
-            compressed_path = compress_video(file_path, "medium")
-
-            # Update the video record with compressed version
-            video = db_session.query(Video).filter(Video.id == video_id).first()
-            if video:
-                # Upload compressed version and update record
-                file_extension = os.path.splitext(file_path)[1]
-                compressed_key = f"compressed_{uuid.uuid4()}{file_extension}"
-
-                compressed_url = await upload_to_spaces_async(
-                    compressed_path, compressed_key, "video/mp4"
-                )
-
-                video.file_path = compressed_key
-                db_session.commit()
-
-            # Clean up temp files
-            if os.path.exists(compressed_path):
-                os.remove(compressed_path)
-
-        # Clean up original temp file
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-        logger.info(f"Background processing completed for video {video_id}")
-
-    except Exception as e:
-        logger.error(f"Background processing failed for video {video_id}: {str(e)}")
-    finally:
-        db_session.close()
-
-
 @router.post("/")
 async def upload_video(
-    background_tasks: BackgroundTasks,
     title: str = Form(...),
     description: str = Form(None),
     project_id: int = Form(None),
@@ -126,25 +54,84 @@ async def upload_video(
     db: Session = Depends(get_db),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """Optimized video upload with immediate response and background processing"""
-
-    # Generate unique filenames
-    file_extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{uuid.uuid4()}{file_extension}"
-    temp_file_path = f"/tmp/{unique_filename}"
+    # Create temp file paths
+    temp_file_path = f"/tmp/{uuid.uuid4()}_{file.filename}"
 
     try:
-        # Stream file to disk efficiently
+        # Save uploaded file to temp location instead of loading into memory
         with open(temp_file_path, "wb") as buffer:
+            # Read and write in chunks to handle large files
             chunk_size = 1024 * 1024  # 1MB chunks
-            while chunk := await file.read(chunk_size):
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
                 buffer.write(chunk)
 
-        # Create database record immediately (before processing)
+        try:
+            logger.info(f"Starting video compression for file: {file.filename}")
+            # Call the compression function
+            compressed_file_path = compress_video(temp_file_path, "medium")
+            logger.info(
+                f"Compression complete. Original size: {os.path.getsize(temp_file_path) / (1024*1024):.2f}MB, "
+                + f"Compressed size: {os.path.getsize(compressed_file_path) / (1024*1024):.2f}MB"
+            )
+        except Exception as e:
+            logger.error(f"Compression failed: {str(e)}. Using original file.")
+            compressed_file_path = temp_file_path
+
+        # Initialize S3 client
+        s3 = boto3.client(
+            "s3",
+            region_name=os.getenv("SPACES_REGION"),
+            endpoint_url=os.getenv("SPACES_ENDPOINT"),
+            aws_access_key_id=os.getenv("SPACES_KEY"),
+            aws_secret_access_key=os.getenv("SPACES_SECRET"),
+        )
+
+        # Upload video with original extension
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+
+        with open(compressed_file_path, "rb") as video_file:
+            s3.put_object(
+                Bucket=os.getenv("SPACES_BUCKET"),
+                Key=unique_filename,
+                Body=video_file,
+                ACL="public-read",
+                ContentType=file.content_type or "video/mp4",
+            )
+
+        file_url = f"https://{os.getenv('SPACES_BUCKET')}.{os.getenv('SPACES_REGION')}.digitaloceanspaces.com/{unique_filename}"
+
+        # Handle thumbnail upload if provided
+        thumbnail_path = None
+        if thumbnail:
+            thumbnail_content = await thumbnail.read()
+            if not thumbnail_content:
+                raise HTTPException(status_code=400, detail="Thumbnail file is empty")
+
+            thumbnail_extension = os.path.splitext(thumbnail.filename)[1]
+            unique_thumbnail_filename = f"{uuid.uuid4()}{thumbnail_extension}"
+            thumbnail_content_type = thumbnail.content_type or "image/jpeg"
+
+            s3.put_object(
+                Bucket=os.getenv("SPACES_BUCKET"),
+                Key=unique_thumbnail_filename,
+                Body=thumbnail_content,
+                ACL="public-read",
+                ContentType=thumbnail_content_type,
+            )
+            thumbnail_path = f"https://{os.getenv('SPACES_BUCKET')}.{os.getenv('SPACES_REGION')}.digitaloceanspaces.com/{unique_thumbnail_filename}"
+
+        # Save video record in database
         new_video = Video(
             title=title,
             description=description,
-            file_path=unique_filename,  # Will be updated after compression
+            file_path=unique_filename,  # Store just the key, not the full URL
+            thumbnail_path=(
+                unique_thumbnail_filename if thumbnail_path else None
+            ),  # Store just the key
             project_id=project_id,
             request_id=request_id,
             user_id=current_user.id,
@@ -154,86 +141,168 @@ async def upload_video(
         db.commit()
         db.refresh(new_video)
 
-        # Handle thumbnail upload synchronously (smaller files)
-        thumbnail_path = None
-        if thumbnail:
-            thumbnail_content = await thumbnail.read()
-            if thumbnail_content:
-                thumbnail_extension = os.path.splitext(thumbnail.filename)[1]
-                unique_thumbnail_filename = f"{uuid.uuid4()}{thumbnail_extension}"
+        # Add the full URLs for the response
+        new_video_dict = new_video.__dict__.copy()
+        new_video_dict["file_path"] = file_url
+        new_video_dict["thumbnail_path"] = thumbnail_path
 
-                s3.put_object(
-                    Bucket=os.getenv("SPACES_BUCKET"),
-                    Key=unique_thumbnail_filename,
-                    Body=thumbnail_content,
-                    ACL="public-read",
-                    ContentType=thumbnail.content_type or "image/jpeg",
-                )
-
-                thumbnail_path = unique_thumbnail_filename
-                new_video.thumbnail_path = thumbnail_path
-                db.commit()
-
-        # Start background processing
-        # Create new session for background task
-        from app.database import SessionLocal
-
-        bg_db = SessionLocal()
-
-        background_tasks.add_task(
-            process_video_background,
-            temp_file_path,
-            new_video.id,
-            bg_db,
-            True,  # Enable compression
-        )
-
-        # Return immediate response
-        return JSONResponse(
-            content={
-                "id": new_video.id,
-                "title": new_video.title,
-                "description": new_video.description,
-                "status": "processing",
-                "message": "Video uploaded successfully and is being processed",
-            },
-            status_code=201,
-        )
+        return new_video_dict
 
     except Exception as e:
         logger.error(f"Failed to upload video: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload video: {str(e)}")
 
-        # Clean up on error
+    finally:
+        # Clean up temporary files
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
 
-        # Remove database record if created
-        if "new_video" in locals():
-            db.delete(new_video)
-            db.commit()
 
-        raise HTTPException(status_code=500, detail=f"Failed to upload video: {str(e)}")
-
-
-@router.get("/{video_id}/status")
-async def get_video_status(
+@router.post("/{video_id}/share")
+async def generate_share_link(
     video_id: int,
+    project_url: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(oauth2.get_current_user),
 ):
-    """Check if video processing is complete"""
-    video = (
-        db.query(Video)
-        .filter(Video.id == video_id, Video.user_id == current_user.id)
-        .first()
-    )
-
+    # Get the video
+    video = db.query(Video).filter(Video.id == video_id).first()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    # Check if file exists in spaces (indicates processing complete)
+    # Update project URL if provided
+    if project_url:
+        video.project_url = project_url
+
+    # Generate share token if not exists
+    if not video.share_token:
+        video.share_token = str(uuid.uuid4())
+
+    video.is_public = True
+    db.commit()
+
+    base_url = (
+        "https://www.ryze.ai"
+        if os.getenv("ENV") == "production"
+        else "http://localhost:3000"
+    )
+    share_url = f"{base_url}/shared/videos/{video.share_token}"
+
+    return {"share_url": share_url, "project_url": video.project_url}
+
+
+def delete_from_spaces(file_key):
+    """Delete a file from Digital Ocean Spaces."""
+    s3_client = boto3.client(
+        "s3",
+        region_name=os.getenv("SPACES_REGION"),
+        endpoint_url=os.getenv("SPACES_ENDPOINT"),
+        aws_access_key_id=os.getenv("SPACES_KEY"),
+        aws_secret_access_key=os.getenv("SPACES_SECRET"),
+    )
+
     try:
-        s3.head_object(Bucket=os.getenv("SPACES_BUCKET"), Key=video.file_path)
-        return {"status": "ready", "video": video}
-    except:
-        return {"status": "processing"}
+        # Make sure spaces_name and spaces_bucket are consistent
+        bucket_name = os.getenv("SPACES_BUCKET") or os.getenv("SPACES_NAME")
+        s3_client.delete_object(Bucket=bucket_name, Key=file_key)
+        logger.info(f"Successfully deleted file {file_key} from Spaces")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete file {file_key} from Spaces: {e}")
+        raise e
+
+
+@router.delete("/{video_id}")
+def delete_video(
+    video_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    # Get the video from the database
+    video_query = db.query(models.Video).filter(models.Video.id == video_id)
+    video = video_query.first()
+
+    # Check if video exists
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video with id {video_id} not found",
+        )
+
+    # Check if user owns the video
+    if video.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this video",
+        )
+
+    # Get file paths before deletion
+    video_path = video.file_path
+    thumbnail_path = video.thumbnail_path
+
+    # Delete from database
+    video_query.delete(synchronize_session=False)
+    db.commit()
+
+    # Delete from Digital Ocean Spaces
+    try:
+        # Extract the key (filename) from the full path
+        # Make sure this handles your actual path format correctly
+        video_key = video_path
+        delete_from_spaces(video_key)
+
+        if thumbnail_path:
+            thumbnail_key = thumbnail_path
+            delete_from_spaces(thumbnail_key)
+
+        return {"message": "Video deleted successfully"}
+    except Exception as e:
+        # Log the error but don't fail the request
+        logger.error(f"Error deleting files from Spaces: {e}")
+        return {
+            "message": "Video deleted from database but there was an issue removing files from storage"
+        }
+
+
+@router.get("/test")
+def test_video_router():
+    return {"message": "Video router is working"}
+
+
+@router.put("/{video_id}", response_model=VideoOut)
+def update_video(
+    video_id: int,
+    video_update: VideoUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(oauth2.get_current_user),
+):
+    # Get the video
+    video_query = db.query(models.Video).filter(models.Video.id == video_id)
+    video = video_query.first()
+
+    # Check if video exists
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Video with id {video_id} not found",
+        )
+
+    # Check if user owns the video
+    if video.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this video",
+        )
+
+    # Update the video with the new data
+    for key, value in video_update.model_dump(exclude_unset=True).items():
+        setattr(video, key, value)
+
+    # Update timestamp
+    video.updated_at = datetime.now()
+
+    # Commit changes to database
+    db.commit()
+    db.refresh(video)
+
+    return video
