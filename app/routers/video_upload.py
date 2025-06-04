@@ -43,6 +43,80 @@ router = APIRouter(prefix="/videos", tags=["Videos"])
 
 
 @router.post("/")
+def upload_to_s3_optimized(file_path, s3_key, content_type):
+    """Optimized S3 upload with multipart for large files"""
+    try:
+        file_size = os.path.getsize(file_path)
+
+        # Use multipart upload for files larger than 100MB
+        if file_size > 100 * 1024 * 1024:
+            logger.info(
+                f"Using multipart upload for {file_size / (1024*1024):.1f}MB file"
+            )
+
+            # Initialize multipart upload
+            response = s3.create_multipart_upload(
+                Bucket=os.getenv("SPACES_BUCKET"),
+                Key=s3_key,
+                ACL="public-read",
+                ContentType=content_type,
+            )
+            upload_id = response["UploadId"]
+
+            parts = []
+            part_number = 1
+            chunk_size = 100 * 1024 * 1024  # 100MB chunks
+
+            with open(file_path, "rb") as f:
+                while True:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+
+                    # Upload part
+                    part_response = s3.upload_part(
+                        Bucket=os.getenv("SPACES_BUCKET"),
+                        Key=s3_key,
+                        PartNumber=part_number,
+                        UploadId=upload_id,
+                        Body=chunk,
+                    )
+
+                    parts.append(
+                        {"ETag": part_response["ETag"], "PartNumber": part_number}
+                    )
+                    part_number += 1
+                    logger.info(f"Uploaded part {part_number-1}")
+
+            # Complete multipart upload
+            s3.complete_multipart_upload(
+                Bucket=os.getenv("SPACES_BUCKET"),
+                Key=s3_key,
+                UploadId=upload_id,
+                MultipartUpload={"Parts": parts},
+            )
+            logger.info("Multipart upload completed")
+
+        else:
+            # Regular upload for smaller files
+            logger.info(
+                f"Using regular upload for {file_size / (1024*1024):.1f}MB file"
+            )
+            with open(file_path, "rb") as f:
+                s3.upload_fileobj(
+                    f,
+                    os.getenv("SPACES_BUCKET"),
+                    s3_key,
+                    ExtraArgs={"ACL": "public-read", "ContentType": content_type},
+                )
+
+        return f"https://{os.getenv('SPACES_BUCKET')}.{os.getenv('SPACES_REGION')}.digitaloceanspaces.com/{s3_key}"
+
+    except Exception as e:
+        logger.error(f"S3 upload failed: {str(e)}")
+        raise e
+
+
 async def upload_video(
     title: str = Form(...),
     description: str = Form(None),
@@ -61,7 +135,7 @@ async def upload_video(
         # Save uploaded file to temp location instead of loading into memory
         with open(temp_file_path, "wb") as buffer:
             # Read and write in chunks to handle large files
-            chunk_size = 1024 * 1024  # 1MB chunks
+            chunk_size = 8 * 1024 * 1024  # 1MB chunks
             while True:
                 chunk = await file.read(chunk_size)
                 if not chunk:
