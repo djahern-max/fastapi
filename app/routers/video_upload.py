@@ -2,6 +2,9 @@
 import os
 import uuid
 import logging
+import time  # ADD THIS IMPORT
+import asyncio
+import concurrent.futures
 from typing import Optional, Dict, Any
 
 # Third-party imports
@@ -116,8 +119,8 @@ def upload_to_s3_optimized(file_path, s3_key, content_type):
         raise e
 
 
-@router.post("/")
-async def upload_video(
+@router.post("/")  # KEEP THE ORIGINAL FUNCTION NAME
+async def upload_video(  # ORIGINAL NAME - DON'T CHANGE THIS
     title: str = Form(...),
     description: str = Form(None),
     project_id: int = Form(None),
@@ -125,6 +128,8 @@ async def upload_video(
     video_type: VideoType = Form(VideoType.solution_demo),
     file: UploadFile = File(...),
     thumbnail: UploadFile = File(None),
+    compress: bool = Form(True),  # NEW: Allow skipping compression
+    compression_level: str = Form("medium"),  # NEW: fast, medium, slow
     db: Session = Depends(get_db),
     current_user: User = Depends(oauth2.get_current_user),
 ):
@@ -132,27 +137,51 @@ async def upload_video(
     temp_file_path = f"/tmp/{uuid.uuid4()}_{file.filename}"
 
     try:
+        start_time = time.time()
+
         # Save uploaded file to temp location instead of loading into memory
         with open(temp_file_path, "wb") as buffer:
             # Read and write in chunks to handle large files
-            chunk_size = 8 * 1024 * 1024  # 1MB chunks
+            chunk_size = 8 * 1024 * 1024  # 8MB chunks
             while True:
                 chunk = await file.read(chunk_size)
                 if not chunk:
                     break
                 buffer.write(chunk)
 
-        try:
-            logger.info(f"Starting video compression for file: {file.filename}")
-            # Call the compression function
-            compressed_file_path = compress_video(temp_file_path, "medium")
+        save_time = time.time() - start_time
+        logger.info(f"File saved in {save_time:.2f}s")
+
+        # Optional compression based on file size and user preference
+        file_size = os.path.getsize(temp_file_path)
+        compressed_file_path = temp_file_path
+
+        # Only compress if requested and file is larger than 50MB
+        if compress and file_size > 50 * 1024 * 1024:
+            try:
+                compression_start = time.time()
+                logger.info(
+                    f"Starting {compression_level} compression for file: {file.filename}"
+                )
+                # Call the compression function
+                compressed_file_path = compress_video(temp_file_path, compression_level)
+                compression_time = time.time() - compression_start
+
+                original_size = file_size / (1024 * 1024)
+                compressed_size = os.path.getsize(compressed_file_path) / (1024 * 1024)
+                logger.info(
+                    f"Compression completed in {compression_time:.2f}s. "
+                    f"Original size: {original_size:.2f}MB, "
+                    f"Compressed size: {compressed_size:.2f}MB "
+                    f"({((original_size - compressed_size) / original_size * 100):.1f}% reduction)"
+                )
+            except Exception as e:
+                logger.error(f"Compression failed: {str(e)}. Using original file.")
+                compressed_file_path = temp_file_path
+        else:
             logger.info(
-                f"Compression complete. Original size: {os.path.getsize(temp_file_path) / (1024*1024):.2f}MB, "
-                + f"Compressed size: {os.path.getsize(compressed_file_path) / (1024*1024):.2f}MB"
+                f"Skipping compression (compress={compress}, size={file_size/(1024*1024):.1f}MB)"
             )
-        except Exception as e:
-            logger.error(f"Compression failed: {str(e)}. Using original file.")
-            compressed_file_path = temp_file_path
 
         # Initialize S3 client
         s3 = boto3.client(
@@ -164,6 +193,7 @@ async def upload_video(
         )
 
         # Upload video with original extension
+        upload_start = time.time()
         file_extension = os.path.splitext(file.filename)[1]
         unique_filename = f"{uuid.uuid4()}{file_extension}"
 
@@ -175,6 +205,13 @@ async def upload_video(
                 ACL="public-read",
                 ContentType=file.content_type or "video/mp4",
             )
+
+        upload_time = time.time() - upload_start
+        upload_size = os.path.getsize(compressed_file_path) / (1024 * 1024)
+        upload_speed = upload_size / upload_time if upload_time > 0 else 0
+        logger.info(
+            f"Upload completed in {upload_time:.2f}s at {upload_speed:.2f} MB/s"
+        )
 
         file_url = f"https://{os.getenv('SPACES_BUCKET')}.{os.getenv('SPACES_REGION')}.digitaloceanspaces.com/{unique_filename}"
 
@@ -216,9 +253,20 @@ async def upload_video(
         db.refresh(new_video)
 
         # Add the full URLs for the response
+        total_time = time.time() - start_time
         new_video_dict = new_video.__dict__.copy()
         new_video_dict["file_path"] = file_url
         new_video_dict["thumbnail_path"] = thumbnail_path
+
+        # Add performance stats for debugging
+        new_video_dict["upload_stats"] = {
+            "total_time": f"{total_time:.2f}s",
+            "save_time": f"{save_time:.2f}s",
+            "upload_time": f"{upload_time:.2f}s",
+            "upload_speed": f"{upload_speed:.2f} MB/s",
+            "compressed": compress and file_size > 50 * 1024 * 1024,
+            "compression_level": compression_level if compress else "none",
+        }
 
         return new_video_dict
 
@@ -230,6 +278,10 @@ async def upload_video(
         # Clean up temporary files
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
+        if compressed_file_path != temp_file_path and os.path.exists(
+            compressed_file_path
+        ):
+            os.remove(compressed_file_path)
 
 
 @router.post("/{video_id}/share")
