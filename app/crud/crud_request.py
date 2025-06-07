@@ -50,9 +50,8 @@ def create_request(db: Session, request: schemas.RequestCreate, user_id: int):
         content=request.content,
         project_id=request.project_id,
         user_id=user_id,
-        is_public=request.is_public,
+        is_public=request.is_public,  # This should be the source of truth
         estimated_budget=request.estimated_budget,
-        # Add the new fields here
         is_idea=request.is_idea,
         seeks_collaboration=request.seeks_collaboration,
         collaboration_details=request.collaboration_details,
