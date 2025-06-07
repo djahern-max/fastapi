@@ -746,9 +746,7 @@ class RequestBase(BaseModel):
     title: str
     content: str
     estimated_budget: Optional[float] = None
-    is_public: bool = False
-    # Remove this line:
-    # contains_sensitive_data: bool = False
+    is_public: bool = True  # Changed from False to True
     is_idea: bool = False
     seeks_collaboration: bool = False
     collaboration_details: Optional[str] = None

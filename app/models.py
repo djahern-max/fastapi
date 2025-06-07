@@ -551,9 +551,8 @@ class Request(Base, TimestampMixin):
     )
     added_to_project_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
-    # Visibility and sharing
-    is_public = Column(Boolean, default=False)
-    # Removed: contains_sensitive_data = Column(Boolean, default=False)
+    # Visibility and sharing - CHANGED DEFAULT HERE
+    is_public = Column(Boolean, default=True)  # Changed from False to True
 
     # Business details
     estimated_budget = Column(Float, nullable=True)
