@@ -110,7 +110,7 @@ async def create_message(  # Make this async
 
         # Authorization check - handle differently for external conversations
         if is_external:
-            # For external support conversations, allow system user and assigned developers
+            # For external support conversations, allow system user, assigned developers, and any developer for unassigned tickets
             request = (
                 db.query(models.Request)
                 .filter(models.Request.id == conversation.request_id)
@@ -132,10 +132,24 @@ async def create_message(  # Make this async
                 is not None
             )
 
-            if not (is_system or is_assigned):
+            # NEW: Allow any developer to view unassigned external tickets
+            is_developer = current_user.user_type == models.UserType.developer
+
+            # Check if ticket is currently unassigned (no active snagged requests)
+            is_unassigned = not (
+                db.query(models.SnaggedRequest)
+                .filter(
+                    models.SnaggedRequest.request_id == conversation.request_id,
+                    models.SnaggedRequest.is_active == True,
+                )
+                .first()
+            )
+
+            # Allow access if user is system, assigned, or any developer viewing unassigned ticket
+            if not (is_system or is_assigned or (is_developer and is_unassigned)):
                 raise HTTPException(
                     status_code=403,
-                    detail="Not authorized to post in this external support conversation",
+                    detail="Not authorized to view this external support conversation",
                 )
         else:
             if current_user.id not in [
