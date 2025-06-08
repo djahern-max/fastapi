@@ -650,35 +650,25 @@ def get_conversation(
     # Check if this is an external conversation
     is_external = getattr(conversation, "is_external", False)
 
-    # Authorization check - handle differently for external conversations
-    if is_external:
-        # For external support conversations, allow system user and assigned developers
-        request = (
-            db.query(models.Request)
-            .filter(models.Request.id == conversation.request_id)
-            .first()
+    # NEW: Allow any developer to view unassigned external tickets
+    is_developer = current_user.user_type == models.UserType.developer
+
+    # Check if ticket is currently unassigned (no active snagged requests)
+    is_unassigned = not (
+        db.query(models.SnaggedRequest)
+        .filter(
+            models.SnaggedRequest.request_id == conversation.request_id,
+            models.SnaggedRequest.is_active == True,
         )
-        if not request:
-            raise HTTPException(status_code=404, detail="Related request not found")
+        .first()
+    )
 
-        is_system = current_user.email == "system@ryze.ai"
-
-        is_assigned = (
-            db.query(models.SnaggedRequest)
-            .filter(
-                models.SnaggedRequest.request_id == conversation.request_id,
-                models.SnaggedRequest.developer_id == current_user.id,
-                models.SnaggedRequest.is_active == True,
-            )
-            .first()
-            is not None
+    # Allow access if user is system, assigned, or any developer viewing unassigned ticket
+    if not (is_system or is_assigned or (is_developer and is_unassigned)):
+        raise HTTPException(
+            status_code=403,
+            detail="Not authorized to view this external support conversation",
         )
-
-        if not (is_system or is_assigned):
-            raise HTTPException(
-                status_code=403,
-                detail="Not authorized to view this external support conversation",
-            )
     else:
         # Standard permission check for non-external conversations
         if (

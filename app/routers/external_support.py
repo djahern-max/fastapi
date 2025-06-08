@@ -157,22 +157,12 @@ def create_external_support_ticket(
             f"External support ticket created successfully with ID {new_request.id}"
         )
 
-        # Find the first available developer to assign the ticket to
-        developer = (
-            db.query(models.User)
-            .filter(models.User.user_type == "developer")
-            .filter(models.User.is_active == True)
-            .filter(models.User.id != system_user.id)  # Not the system user
-            .first()
-        )
-
-        recipient_id = developer.id if developer else system_user.id
-
-        # Create a new conversation with external support specific fields
+        # FIXED: Create conversation but don't auto-assign to anyone
+        # Let developers see it and snag it manually like regular requests
         new_conversation = models.Conversation(
             request_id=new_request.id,
             starter_user_id=system_user.id,
-            recipient_user_id=recipient_id,
+            recipient_user_id=system_user.id,  # Keep as system user until manually snagged
             status="active",
             # Add these new fields for external support
             is_external=True,
@@ -195,7 +185,7 @@ def create_external_support_ticket(
         initial_message = models.ConversationMessage(
             conversation_id=new_conversation.id,
             user_id=system_user.id,
-            content=f"[EXTERNAL SUPPORT] Ticket created from {ticket.source} for {ticket.email}. Please respond within one hour.",
+            content=f"[EXTERNAL SUPPORT] Ticket created from {ticket.source} for {ticket.email}. Available for any developer to claim.",
         )
         db.add(initial_message)
 
@@ -211,21 +201,12 @@ def create_external_support_ticket(
 
         logger.info(f"Created external conversation with ID {new_conversation.id}")
 
-        # Try to add it to the developer's snagged requests if we found a developer
-        if developer and developer.id != system_user.id:
-            try:
-                # Create a snagged request entry
-                snagged = models.SnaggedRequest(
-                    request_id=new_request.id,
-                    developer_id=developer.id,
-                    is_active=True,
-                )
-                db.add(snagged)
-                db.commit()
-                logger.info(f"Auto-assigned ticket to developer ID {developer.id}")
-            except Exception as snag_error:
-                logger.error(f"Error auto-assigning ticket: {str(snag_error)}")
-                # Continue even if snagging fails
+        # REMOVED: Auto-assignment logic
+        # External tickets should be available for any developer to snag manually
+        # This ensures fair competition and prevents random assignment to inactive users
+        logger.info(
+            f"External ticket {new_request.id} created and ready for manual assignment"
+        )
 
         # Return both the request and conversation IDs
         return {
