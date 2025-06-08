@@ -661,13 +661,41 @@ def get_conversation(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    # Get related users and request
+    starter_user = (
+        db.query(models.User)
+        .filter(models.User.id == conversation.starter_user_id)
+        .first()
+    )
+    recipient_user = (
+        db.query(models.User)
+        .filter(models.User.id == conversation.recipient_user_id)
+        .first()
+    )
+    request = (
+        db.query(models.Request)
+        .filter(models.Request.id == conversation.request_id)
+        .first()
+    )
+
     # Check if this is an external conversation
     is_external = getattr(conversation, "is_external", False)
 
-    # NEW: Allow any developer to view unassigned external tickets
+    # Define all the permission variables
+    is_system = (starter_user and starter_user.username == "system") or (
+        recipient_user and recipient_user.username == "system"
+    )
+    is_assigned = (
+        db.query(models.SnaggedRequest)
+        .filter(
+            models.SnaggedRequest.request_id == conversation.request_id,
+            models.SnaggedRequest.developer_id == current_user.id,
+            models.SnaggedRequest.is_active == True,
+        )
+        .first()
+        is not None
+    )
     is_developer = current_user.user_type == models.UserType.developer
-
-    # Check if ticket is currently unassigned (no active snagged requests)
     is_unassigned = not (
         db.query(models.SnaggedRequest)
         .filter(
@@ -677,12 +705,14 @@ def get_conversation(
         .first()
     )
 
-    # Allow access if user is system, assigned, or any developer viewing unassigned ticket
-    if not (is_system or is_assigned or (is_developer and is_unassigned)):
-        raise HTTPException(
-            status_code=403,
-            detail="Not authorized to view this external support conversation",
-        )
+    # Permission check
+    if is_external:
+        # For external conversations, allow system users, assigned developers, or any developer for unassigned tickets
+        if not (is_system or is_assigned or (is_developer and is_unassigned)):
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to view this external support conversation",
+            )
     else:
         # Standard permission check for non-external conversations
         if (
@@ -693,24 +723,88 @@ def get_conversation(
                 status_code=403, detail="Not authorized to view this conversation"
             )
 
-    # Create a dictionary with all the required fields for the response schema
+    # Get messages for this conversation
+    messages = (
+        db.query(models.ConversationMessage)
+        .filter(models.ConversationMessage.conversation_id == conversation_id)
+        .order_by(models.ConversationMessage.created_at)
+        .all()
+    )
+
+    # Process messages and their linked content
+    message_list = []
+    for msg in messages:
+        content_links = (
+            db.query(models.ConversationContentLink)
+            .filter(models.ConversationContentLink.message_id == msg.id)
+            .all()
+        )
+
+        linked_content = []
+        for link in content_links:
+            if link.content_type == "video":
+                video = (
+                    db.query(models.Video)
+                    .filter(models.Video.id == link.content_id)
+                    .first()
+                )
+                if video:
+                    linked_content.append(
+                        {
+                            "id": link.id,
+                            "type": "video",
+                            "content_id": video.id,
+                            "title": video.title,
+                            "url": video.file_path,
+                        }
+                    )
+            elif link.content_type == "profile":
+                user = (
+                    db.query(models.User)
+                    .filter(models.User.id == link.content_id)
+                    .first()
+                )
+                if user:
+                    linked_content.append(
+                        {
+                            "id": link.id,
+                            "type": "profile",
+                            "content_id": user.id,
+                            "title": f"{user.username}'s Profile",
+                            "url": f"/profile/developer/{user.id}",
+                        }
+                    )
+
+        # Check if message is external
+        is_external_message = (
+            hasattr(msg, "external_source") and msg.external_source == "analytics-hub"
+        )
+
+        message_data = {
+            "id": msg.id,
+            "conversation_id": msg.conversation_id,
+            "user_id": msg.user_id,
+            "content": msg.content,
+            "created_at": msg.created_at,
+            "linked_content": linked_content,
+        }
+        message_list.append(message_data)
+
+    # Create the response data
     response_data = {
         "id": conversation.id,
         "request_id": conversation.request_id,
         "starter_user_id": conversation.starter_user_id,
         "recipient_user_id": conversation.recipient_user_id,
         "status": conversation.status,
-        "agreed_amount": None,  # Replace with actual value if it exists
+        "agreed_amount": getattr(conversation, "agreed_amount", None),
         "created_at": conversation.created_at,
-        # Get these values from the relationships
-        "starter_username": conversation.starter.username,
-        "recipient_username": conversation.recipient.username,
-        "request_title": conversation.request.title,
-        # Get messages
-        "messages": conversation.messages,
+        "starter_username": starter_user.username if starter_user else "Unknown",
+        "recipient_username": recipient_user.username if recipient_user else "Unknown",
+        "request_title": request.title if request else "Unknown Request",
+        "messages": message_list,
     }
 
-    # Return the constructed response
     return response_data
 
 
