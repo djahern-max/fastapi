@@ -1,4 +1,4 @@
-# app/routers/dynamic_meta.py - Simple version that works
+# app/routers/dynamic_meta.py - Using consistent RYZE.ai branding
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -138,8 +138,7 @@ async def developer_profile_meta(developer_id: int, db: Session = Depends(get_db
             "og_title": f"Check Out {full_name}'s Profile on RYZE.ai! 🚀",
             "og_description": short_bio
             or f"{title} with {experience} years of experience in {skills_preview}",
-            "og_image": developer_profile.profile_image_url
-            or f"{base_url}/og-developer-default.png",
+            "og_image": f"{base_url}/og-image.png",  # Always use RYZE.ai brand image
             "og_url": f"{base_url}/developers/{developer_id}",
             "react_route": f"/developers/{developer_id}",
         }
@@ -173,7 +172,7 @@ async def video_meta(video_id: int, db: Session = Depends(get_db)):
             "description": f"Watch '{video_title}' by {creator_name} on RYZE.ai. {short_description}",
             "og_title": f"🎥 Watch: {video_title}",
             "og_description": short_description or f"Amazing video by {creator_name}",
-            "og_image": video.thumbnail_path or f"{base_url}/og-video-default.png",
+            "og_image": f"{base_url}/og-image.png",  # Always use RYZE.ai brand image
             "og_url": f"{base_url}/videos/{video_id}",
             "react_route": f"/videos/{video_id}",
         }
@@ -208,7 +207,7 @@ async def showcase_meta(showcase_id: int, db: Session = Depends(get_db)):
             "og_title": f"✨ Check Out This Amazing Project: {showcase_title}",
             "og_description": short_description
             or f"Incredible project showcasing the skills of {developer_name}",
-            "og_image": showcase.image_url or f"{base_url}/og-showcase-default.png",
+            "og_image": f"{base_url}/og-image.png",  # Always use RYZE.ai brand image
             "og_url": f"{base_url}/showcase/{showcase_id}",
             "react_route": f"/showcase/{showcase_id}",
         }
