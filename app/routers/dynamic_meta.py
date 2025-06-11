@@ -1,4 +1,4 @@
-# app/routers/dynamic_meta.py - Simplified version to get it working
+# app/routers/dynamic_meta.py - Fixed version with proper route handling
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -117,11 +117,39 @@ def generate_html_with_meta(meta_data: dict) -> HTMLResponse:
     return HTMLResponse(content=modified_html)
 
 
-@router.get("/developers/{developer_id}", response_class=HTMLResponse)
-async def developer_profile_meta(developer_id: int, db: Session = Depends(get_db)):
-    """Generate dynamic meta tags for developer profiles"""
+def create_profile_meta_data(user, developer_profile, identifier):
+    """Helper function to create meta data for developer profiles"""
+    base_url = get_base_url()
+
+    full_name = user.full_name or user.username or f"Developer #{identifier}"
+    title = developer_profile.professional_title or "Software Developer"
+    bio = developer_profile.bio or ""
+    skills = developer_profile.skills or ""
+    experience = developer_profile.experience_years or 0
+
+    short_bio = (bio[:120] + "...") if len(bio) > 120 else bio
+    skills_preview = (skills[:80] + "...") if len(skills) > 80 else skills
+
+    return {
+        "title": f"{full_name} - {title} | RYZE.ai",
+        "description": f"Check out {full_name}'s profile on RYZE.ai! {experience} years experience. {short_bio or skills_preview}",
+        "og_title": f"Check Out {full_name}'s Profile on RYZE.ai! 🚀",
+        "og_description": short_bio
+        or f"{title} with {experience} years of experience in {skills_preview}",
+        "og_image": developer_profile.profile_image_url
+        or f"{base_url}/og-developer-default.png",
+        "og_url": f"{base_url}/developers/{identifier}",
+        "react_route": f"/developers/{identifier}",
+    }
+
+
+# Route for numeric IDs (existing links)
+@router.get("/developers/{developer_id:int}", response_class=HTMLResponse)
+async def developer_profile_meta_by_id(
+    developer_id: int, db: Session = Depends(get_db)
+):
+    """Generate dynamic meta tags for developer profiles by ID"""
     try:
-        # Direct database query instead of CRUD function
         developer_profile = (
             db.query(DeveloperProfile)
             .filter(DeveloperProfile.user_id == developer_id)
@@ -134,34 +162,46 @@ async def developer_profile_meta(developer_id: int, db: Session = Depends(get_db
             )
 
         user = developer_profile.user
-        base_url = get_base_url()
+        meta_data = create_profile_meta_data(user, developer_profile, developer_id)
+        return generate_html_with_meta(meta_data)
 
-        full_name = user.full_name or user.username or f"Developer #{developer_id}"
-        title = developer_profile.professional_title or "Software Developer"
-        bio = developer_profile.bio or ""
-        skills = developer_profile.skills or ""
-        experience = developer_profile.experience_years or 0
+    except Exception as e:
+        logger.error(f"Error generating developer meta by ID: {str(e)}")
+        return RedirectResponse(url=f"/#/developers/{developer_id}", status_code=302)
 
-        short_bio = (bio[:120] + "...") if len(bio) > 120 else bio
-        skills_preview = (skills[:80] + "...") if len(skills) > 80 else skills
 
-        meta_data = {
-            "title": f"{full_name} - {title} | RYZE.ai",
-            "description": f"Check out {full_name}'s profile on RYZE.ai! {experience} years experience. {short_bio or skills_preview}",
-            "og_title": f"Check Out {full_name}'s Profile on RYZE.ai! 🚀",
-            "og_description": short_bio
-            or f"{title} with {experience} years of experience in {skills_preview}",
-            "og_image": developer_profile.profile_image_url
-            or f"{base_url}/og-developer-default.png",
-            "og_url": f"{base_url}/developers/{developer_id}",
-            "react_route": f"/developers/{developer_id}",
-        }
+# Route for usernames (new, clean URLs)
+@router.get("/u/{username}", response_class=HTMLResponse)
+async def developer_profile_meta_by_username(
+    username: str, db: Session = Depends(get_db)
+):
+    """Generate dynamic meta tags for developer profiles by username"""
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            return RedirectResponse(url=f"/#/developers/{username}", status_code=302)
+
+        developer_profile = (
+            db.query(DeveloperProfile)
+            .filter(DeveloperProfile.user_id == user.id)
+            .first()
+        )
+
+        if not developer_profile:
+            return RedirectResponse(url=f"/#/developers/{username}", status_code=302)
+
+        meta_data = create_profile_meta_data(user, developer_profile, username)
+        # Update the URL to use the clean username format
+        meta_data["og_url"] = f"{get_base_url()}/u/{username}"
+        meta_data["react_route"] = (
+            f"/developers/{user.id}"  # Still route to ID in React
+        )
 
         return generate_html_with_meta(meta_data)
 
     except Exception as e:
-        logger.error(f"Error generating developer meta: {str(e)}")
-        return RedirectResponse(url=f"/#/developers/{developer_id}", status_code=302)
+        logger.error(f"Error generating developer meta by username: {str(e)}")
+        return RedirectResponse(url=f"/#/developers/{username}", status_code=302)
 
 
 @router.get("/videos/{video_id}", response_class=HTMLResponse)
@@ -203,7 +243,6 @@ async def video_meta(video_id: int, db: Session = Depends(get_db)):
 async def showcase_meta(showcase_id: int, db: Session = Depends(get_db)):
     """Generate dynamic meta tags for showcases"""
     try:
-        # Direct database query for now
         showcase = db.query(Showcase).filter(Showcase.id == showcase_id).first()
         if not showcase:
             return RedirectResponse(url=f"/#/showcase/{showcase_id}", status_code=302)
