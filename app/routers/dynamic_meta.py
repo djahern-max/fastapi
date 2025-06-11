@@ -1,4 +1,4 @@
-# app/routers/dynamic_meta.py - CORRECTED VERSION with proper model names
+# app/routers/dynamic_meta.py - Simplified version to get it working
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -8,8 +8,6 @@ import logging
 
 from ..database import get_db
 from ..models import User, DeveloperProfile, Video, Showcase
-from ..crud.crud_user import get_developer_profile_by_user_id
-from ..crud.project_showcase import get_showcase_by_id
 from ..config import settings
 
 router = APIRouter(tags=["Dynamic Meta Tags"])
@@ -123,7 +121,13 @@ def generate_html_with_meta(meta_data: dict) -> HTMLResponse:
 async def developer_profile_meta(developer_id: int, db: Session = Depends(get_db)):
     """Generate dynamic meta tags for developer profiles"""
     try:
-        developer_profile = get_developer_profile_by_user_id(db, developer_id)
+        # Direct database query instead of CRUD function
+        developer_profile = (
+            db.query(DeveloperProfile)
+            .filter(DeveloperProfile.user_id == developer_id)
+            .first()
+        )
+
         if not developer_profile:
             return RedirectResponse(
                 url=f"/#/developers/{developer_id}", status_code=302
@@ -199,7 +203,8 @@ async def video_meta(video_id: int, db: Session = Depends(get_db)):
 async def showcase_meta(showcase_id: int, db: Session = Depends(get_db)):
     """Generate dynamic meta tags for showcases"""
     try:
-        showcase = get_showcase_by_id(db, showcase_id)
+        # Direct database query for now
+        showcase = db.query(Showcase).filter(Showcase.id == showcase_id).first()
         if not showcase:
             return RedirectResponse(url=f"/#/showcase/{showcase_id}", status_code=302)
 
