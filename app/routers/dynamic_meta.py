@@ -1,5 +1,3 @@
-# app/routers/dynamic_meta.py - FIXED VERSION - No templates required
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -7,7 +5,7 @@ import os
 import logging
 
 from ..database import get_db
-from ..models import User, DeveloperProfile, Video, ProjectShowcase
+from ..models import User, DeveloperProfile, Video, Showcase
 from ..crud.crud_user import get_developer_profile_by_user_id
 from ..crud.project_showcase import get_showcase_by_id
 from ..config import settings
@@ -132,19 +130,11 @@ async def developer_profile_meta(developer_id: int, db: Session = Depends(get_db
         user = developer_profile.user
         base_url = get_base_url()
 
-        # Safely get user data
-        full_name = (
-            getattr(user, "full_name", None)
-            or getattr(user, "username", None)
-            or f"Developer #{developer_id}"
-        )
-        title = (
-            getattr(developer_profile, "professional_title", None)
-            or "Software Developer"
-        )
-        bio = getattr(developer_profile, "bio", None) or ""
-        skills = getattr(developer_profile, "skills", None) or ""
-        experience = getattr(developer_profile, "experience_years", None) or 0
+        full_name = user.full_name or user.username or f"Developer #{developer_id}"
+        title = developer_profile.professional_title or "Software Developer"
+        bio = developer_profile.bio or ""
+        skills = developer_profile.skills or ""
+        experience = developer_profile.experience_years or 0
 
         short_bio = (bio[:120] + "...") if len(bio) > 120 else bio
         skills_preview = (skills[:80] + "...") if len(skills) > 80 else skills
@@ -155,7 +145,7 @@ async def developer_profile_meta(developer_id: int, db: Session = Depends(get_db
             "og_title": f"Check Out {full_name}'s Profile on RYZE.ai! 🚀",
             "og_description": short_bio
             or f"{title} with {experience} years of experience in {skills_preview}",
-            "og_image": getattr(developer_profile, "profile_image_url", None)
+            "og_image": developer_profile.profile_image_url
             or f"{base_url}/og-developer-default.png",
             "og_url": f"{base_url}/developers/{developer_id}",
             "react_route": f"/developers/{developer_id}",
@@ -177,15 +167,11 @@ async def video_meta(video_id: int, db: Session = Depends(get_db)):
             return RedirectResponse(url=f"/#/videos/{video_id}", status_code=302)
 
         user = video.user
-        creator_name = (
-            getattr(user, "full_name", None)
-            or getattr(user, "username", None)
-            or "RYZE Creator"
-        )
+        creator_name = user.full_name or user.username or "RYZE Creator"
         base_url = get_base_url()
 
-        video_title = getattr(video, "title", None) or f"Video by {creator_name}"
-        description = getattr(video, "description", None) or ""
+        video_title = video.title or f"Video by {creator_name}"
+        description = video.description or ""
         short_description = (
             (description[:120] + "...") if len(description) > 120 else description
         )
@@ -195,8 +181,7 @@ async def video_meta(video_id: int, db: Session = Depends(get_db)):
             "description": f"Watch '{video_title}' by {creator_name} on RYZE.ai. {short_description}",
             "og_title": f"🎥 Watch: {video_title}",
             "og_description": short_description or f"Amazing video by {creator_name}",
-            "og_image": getattr(video, "thumbnail_path", None)
-            or f"{base_url}/og-video-default.png",
+            "og_image": video.thumbnail_path or f"{base_url}/og-video-default.png",
             "og_url": f"{base_url}/videos/{video_id}",
             "react_route": f"/videos/{video_id}",
         }
@@ -217,15 +202,11 @@ async def showcase_meta(showcase_id: int, db: Session = Depends(get_db)):
             return RedirectResponse(url=f"/#/showcase/{showcase_id}", status_code=302)
 
         developer = showcase.developer
-        developer_name = (
-            getattr(developer, "full_name", None)
-            or getattr(developer, "username", None)
-            or "RYZE Developer"
-        )
+        developer_name = developer.full_name or developer.username or "RYZE Developer"
         base_url = get_base_url()
 
-        showcase_title = getattr(showcase, "title", None) or "Amazing Project"
-        description = getattr(showcase, "description", None) or ""
+        showcase_title = showcase.title or "Amazing Project"
+        description = showcase.description or ""
         short_description = (
             (description[:120] + "...") if len(description) > 120 else description
         )
@@ -236,8 +217,7 @@ async def showcase_meta(showcase_id: int, db: Session = Depends(get_db)):
             "og_title": f"✨ Check Out This Amazing Project: {showcase_title}",
             "og_description": short_description
             or f"Incredible project showcasing the skills of {developer_name}",
-            "og_image": getattr(showcase, "image_url", None)
-            or f"{base_url}/og-showcase-default.png",
+            "og_image": showcase.image_url or f"{base_url}/og-showcase-default.png",
             "og_url": f"{base_url}/showcase/{showcase_id}",
             "react_route": f"/showcase/{showcase_id}",
         }
