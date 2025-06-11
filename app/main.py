@@ -1,229 +1,234 @@
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from dotenv import load_dotenv
+# app/routers/dynamic_meta.py - CORRECTED VERSION with proper model names
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.orm import Session
 import os
-from app.routers import (
-    register,
-    login,
-    video_upload,
-    display_videos,
-    projects,
-    conversations,
-    profile,
-    public_profile,
-    request as requests_router,
-    feedback,
-    payment,
-    vote,
-    snagged_requests,
-    shared_videos,
-    project_showcase,
-    rating,
-    developer_metrics,
-    video_ratings,
-    external_support,
-    collaboration,
-    analyticshub_webhook,
-    playlists,
-    developer_ratings,
-)
-from fastapi.routing import APIRoute
-from fastapi.responses import JSONResponse, PlainTextResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
 import logging
-import sys
-from app.routers import oauth
-from starlette.middleware.sessions import SessionMiddleware
-from pathlib import Path
-from .routers import dynamic_meta
 
+from ..database import get_db
+from ..models import User, DeveloperProfile, Video, Showcase
+from ..crud.crud_user import get_developer_profile_by_user_id
+from ..crud.project_showcase import get_showcase_by_id
+from ..config import settings
 
-class CacheControlMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
-        if request.url.path.endswith((".ico", ".png", ".svg", ".json")):
-            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
-        return response
-
-
-# Load environment variables first
-load_dotenv(dotenv_path=Path.home() / ".env")
-
-# Configure logging based on environment
-if os.getenv("ENV") == "production":
-    LOG_DIR = "/var/log/ryzeapi"
-else:
-    # Use a local directory for development
-    LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
-
-# Create the log directory if it doesn't exist
-os.makedirs(LOG_DIR, exist_ok=True)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(os.path.join(LOG_DIR, "app.log")),
-    ],
-)
+router = APIRouter(tags=["Dynamic Meta Tags"])
 logger = logging.getLogger(__name__)
 
-
-# Load environment variables
-load_dotenv()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    yield
+# Simple production build path
+BUILD_HTML_PATH = "/home/dane/app/src/ryze-ai-frontend/build/index.html"
 
 
-app = FastAPI(
-    lifespan=lifespan,
-    title="ireallycode API",
-    description="API for ireallycode platform",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-)
-
-# Retrieve allowed origins from the environment
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
-
-app.add_middleware(
-    SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", "supersecretkey")
-)
-
-# Set up CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Add this right after your CORS middleware
-app.add_middleware(CacheControlMiddleware)
-
-# Register routers with their prefixes
-routers_with_prefixes = [
-    (register.router, "/auth"),
-    (login.router, "/auth"),
-    (projects.router, ""),
-    (video_upload.router, ""),
-    (display_videos.router, ""),
-    (requests_router.router, ""),
-    (conversations.router, ""),
-    (profile.router, ""),
-    (public_profile.router, ""),
-    (feedback.router, ""),
-    (payment.router, ""),
-    (vote.router, ""),
-    (snagged_requests.router, ""),
-    (shared_videos.router, ""),
-    (project_showcase.router, ""),
-    (rating.router, ""),
-    (video_ratings.router, ""),
-    (developer_metrics.router, ""),
-    (external_support.router, ""),
-    (collaboration.router, ""),
-    (analyticshub_webhook.router, ""),
-    (playlists.router, ""),
-    (developer_ratings.router, ""),
-    (dynamic_meta.router, ""),
-]
-
-# Include all routers in this code
-for router, prefix in routers_with_prefixes:
-    app.include_router(router, prefix=prefix)
-
-# Include OAuth router
-app.include_router(oauth.router)
-# Add this line to include the LinkedIn OAuth router
+def get_base_url():
+    """Get base URL from your existing config"""
+    try:
+        frontend_url = getattr(settings, "frontend_url", "https://www.ryze.ai")
+        return frontend_url.rstrip("/")
+    except:
+        return "https://www.ryze.ai"
 
 
-@app.get("/routes")
-async def get_routes():
-    routes = []
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            routes.append(
-                {
-                    "path": route.path,
-                    "name": route.name,
-                    "methods": list(route.methods),
-                    "endpoint": route.endpoint.__name__ if route.endpoint else None,
-                    "tags": route.tags,
-                }
-            )
-    routes.sort(key=lambda x: x["path"])
-    return {"routes": routes}
+def get_base_html() -> str:
+    """Read the production build HTML - simple version"""
+    try:
+        if os.path.exists(BUILD_HTML_PATH):
+            with open(BUILD_HTML_PATH, "r", encoding="utf-8") as f:
+                content = f.read()
+            logger.info("✅ Loaded production HTML template")
+            return content
+        else:
+            logger.error(f"❌ Build not found at: {BUILD_HTML_PATH}")
+            logger.error("Run 'npm run build' first!")
+            return get_error_html()
+    except Exception as e:
+        logger.error(f"Error reading HTML: {str(e)}")
+        return get_error_html()
 
 
-@app.get("/api-test")
-async def api_test():
-    return JSONResponse(
-        content={"status": "ok", "message": "API endpoint working"},
-        headers={"Content-Type": "application/json"},
+def get_error_html() -> str:
+    """Simple error page if build is missing"""
+    return """<!DOCTYPE html>
+<html><head><title>RYZE.ai - Build Required</title></head>
+<body style="font-family: sans-serif; text-align: center; padding: 50px;">
+    <h1>🚀 RYZE.ai</h1>
+    <h2 style="color: #dc3545;">Build Missing</h2>
+    <p>Run <code>npm run build</code> in the frontend directory first!</p>
+    <p><a href="/#/">Continue to app</a></p>
+</body></html>"""
+
+
+def escape_html(text: str) -> str:
+    """Escape HTML entities"""
+    if not text:
+        return ""
+    return (
+        str(text)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;")
     )
 
 
-@app.get("/routes-description", response_class=PlainTextResponse)
-async def get_routes_description():
-    """
-    Returns a human-readable description of all the routes in the application.
-    """
-    routes = []
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            methods = ", ".join(route.methods)
-            route_description = (
-                f"Path: {route.path}\n"
-                f"Methods: {methods}\n"
-                f"Name: {route.name}\n"
-                f"Tags: {', '.join(route.tags) if route.tags else 'None'}\n"
-                f"Endpoint: {route.endpoint.__name__ if route.endpoint else 'None'}\n"
+def generate_html_with_meta(meta_data: dict) -> HTMLResponse:
+    """Generate HTML with dynamic meta tags"""
+    base_html = get_base_html()
+
+    if "Build Missing" in base_html:
+        return HTMLResponse(content=base_html)
+
+    # Create dynamic meta tags
+    meta_html = f"""
+    <title>{escape_html(meta_data['title'])}</title>
+    <meta name="description" content="{escape_html(meta_data['description'])}" />
+    
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="{meta_data['og_url']}" />
+    <meta property="og:title" content="{escape_html(meta_data['og_title'])}" />
+    <meta property="og:description" content="{escape_html(meta_data['og_description'])}" />
+    <meta property="og:image" content="{meta_data['og_image']}" />
+    <meta property="og:site_name" content="RYZE.ai" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="{escape_html(meta_data['og_title'])}" />
+    <meta name="twitter:description" content="{escape_html(meta_data['og_description'])}" />
+    <meta name="twitter:image" content="{meta_data['og_image']}" />
+    <meta name="twitter:site" content="@ryze_ai" />
+    
+    <!-- Redirect to React route -->
+    <script>
+        window.addEventListener('DOMContentLoaded', function() {{
+            window.location.hash = "{meta_data['react_route']}";
+        }});
+    </script>"""
+
+    # Insert meta tags
+    if "<!-- DYNAMIC_META_TAGS -->" in base_html:
+        modified_html = base_html.replace("<!-- DYNAMIC_META_TAGS -->", meta_html)
+    else:
+        # Fallback: insert before </head>
+        head_end = base_html.find("</head>")
+        if head_end != -1:
+            modified_html = base_html[:head_end] + meta_html + base_html[head_end:]
+        else:
+            modified_html = base_html + meta_html
+
+    return HTMLResponse(content=modified_html)
+
+
+@router.get("/developers/{developer_id}", response_class=HTMLResponse)
+async def developer_profile_meta(developer_id: int, db: Session = Depends(get_db)):
+    """Generate dynamic meta tags for developer profiles"""
+    try:
+        # Use the correct parameter name from your CRUD function
+        developer_profile = get_developer_profile_by_user_id(db, developer_id)
+        if not developer_profile:
+            return RedirectResponse(
+                url=f"/#/developers/{developer_id}", status_code=302
             )
-            routes.append(route_description)
 
-    # Join all routes' descriptions into a single plain text response
-    return "\n".join(routes)
+        user = developer_profile.user
+        base_url = get_base_url()
+
+        # Safely get user data with proper attribute access
+        full_name = user.full_name or user.username or f"Developer #{developer_id}"
+        title = developer_profile.professional_title or "Software Developer"
+        bio = developer_profile.bio or ""
+        skills = developer_profile.skills or ""
+        experience = developer_profile.experience_years or 0
+
+        short_bio = (bio[:120] + "...") if len(bio) > 120 else bio
+        skills_preview = (skills[:80] + "...") if len(skills) > 80 else skills
+
+        meta_data = {
+            "title": f"{full_name} - {title} | RYZE.ai",
+            "description": f"Check out {full_name}'s profile on RYZE.ai! {experience} years experience. {short_bio or skills_preview}",
+            "og_title": f"Check Out {full_name}'s Profile on RYZE.ai! 🚀",
+            "og_description": short_bio
+            or f"{title} with {experience} years of experience in {skills_preview}",
+            "og_image": developer_profile.profile_image_url
+            or f"{base_url}/og-developer-default.png",
+            "og_url": f"{base_url}/developers/{developer_id}",
+            "react_route": f"/developers/{developer_id}",
+        }
+
+        return generate_html_with_meta(meta_data)
+
+    except Exception as e:
+        logger.error(f"Error generating developer meta: {str(e)}")
+        return RedirectResponse(url=f"/#/developers/{developer_id}", status_code=302)
 
 
-@app.get("/routes-simple", response_class=PlainTextResponse)
-async def get_routes_simple():
-    """
-    Returns a concise list of all routes with their paths and methods.
-    """
-    routes = []
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            methods = ", ".join(route.methods)
-            routes.append(f"{methods}: {route.path}")
+@router.get("/videos/{video_id}", response_class=HTMLResponse)
+async def video_meta(video_id: int, db: Session = Depends(get_db)):
+    """Generate dynamic meta tags for videos"""
+    try:
+        video = db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            return RedirectResponse(url=f"/#/videos/{video_id}", status_code=302)
 
-    return "\n".join(routes)
+        user = video.user
+        creator_name = user.full_name or user.username or "RYZE Creator"
+        base_url = get_base_url()
+
+        video_title = video.title or f"Video by {creator_name}"
+        description = video.description or ""
+        short_description = (
+            (description[:120] + "...") if len(description) > 120 else description
+        )
+
+        meta_data = {
+            "title": f"{video_title} | RYZE.ai",
+            "description": f"Watch '{video_title}' by {creator_name} on RYZE.ai. {short_description}",
+            "og_title": f"🎥 Watch: {video_title}",
+            "og_description": short_description or f"Amazing video by {creator_name}",
+            "og_image": video.thumbnail_path or f"{base_url}/og-video-default.png",
+            "og_url": f"{base_url}/videos/{video_id}",
+            "react_route": f"/videos/{video_id}",
+        }
+
+        return generate_html_with_meta(meta_data)
+
+    except Exception as e:
+        logger.error(f"Error generating video meta: {str(e)}")
+        return RedirectResponse(url=f"/#/videos/{video_id}", status_code=302)
 
 
-@app.get("/test")
-async def test_route():
-    return {"message": "API is working"}
+@router.get("/showcase/{showcase_id}", response_class=HTMLResponse)
+async def showcase_meta(showcase_id: int, db: Session = Depends(get_db)):
+    """Generate dynamic meta tags for showcases"""
+    try:
+        showcase = get_showcase_by_id(db, showcase_id)
+        if not showcase:
+            return RedirectResponse(url=f"/#/showcase/{showcase_id}", status_code=302)
 
+        # Access the developer through the relationship
+        developer = showcase.developer
+        developer_name = developer.full_name or developer.username or "RYZE Developer"
+        base_url = get_base_url()
 
-@app.get("/auth/test-config")
-async def test_oauth_config():
-    """Test endpoint to check if OAuth environment variables are properly loaded"""
-    return {
-        "google_client_id_set": bool(os.getenv("GOOGLE_CLIENT_ID")),
-        "github_client_id_set": bool(os.getenv("GITHUB_CLIENT_ID")),
-        "linkedin_client_id_set": bool(os.getenv("LINKEDIN_CLIENT_ID")),
-        "base_url": os.getenv("BASE_URL"),
-        "allowed_origins": allowed_origins,
-    }
+        showcase_title = showcase.title or "Amazing Project"
+        description = showcase.description or ""
+        short_description = (
+            (description[:120] + "...") if len(description) > 120 else description
+        )
+
+        meta_data = {
+            "title": f"{showcase_title} - Project Showcase | RYZE.ai",
+            "description": f"Explore '{showcase_title}' by {developer_name} on RYZE.ai. {short_description}",
+            "og_title": f"✨ Check Out This Amazing Project: {showcase_title}",
+            "og_description": short_description
+            or f"Incredible project showcasing the skills of {developer_name}",
+            "og_image": showcase.image_url or f"{base_url}/og-showcase-default.png",
+            "og_url": f"{base_url}/showcase/{showcase_id}",
+            "react_route": f"/showcase/{showcase_id}",
+        }
+
+        return generate_html_with_meta(meta_data)
+
+    except Exception as e:
+        logger.error(f"Error generating showcase meta: {str(e)}")
+        return RedirectResponse(url=f"/#/showcase/{showcase_id}", status_code=302)
