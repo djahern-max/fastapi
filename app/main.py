@@ -37,6 +37,7 @@ import sys
 from app.routers import oauth
 from starlette.middleware.sessions import SessionMiddleware
 from pathlib import Path
+from .routers import dynamic_meta
 
 
 class CacheControlMiddleware(BaseHTTPMiddleware):
@@ -137,6 +138,7 @@ routers_with_prefixes = [
     (analyticshub_webhook.router, ""),
     (playlists.router, ""),
     (developer_ratings.router, ""),
+    (dynamic_meta.router, ""),
 ]
 
 # Include all routers in this code
