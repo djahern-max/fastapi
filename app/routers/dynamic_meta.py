@@ -1,3 +1,5 @@
+# app/routers/dynamic_meta.py - CORRECTED VERSION with proper model names
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
