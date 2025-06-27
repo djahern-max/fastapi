@@ -34,7 +34,7 @@ from ..crud.project_showcase import (
 
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/project-showcase", tags=["project-showcase"])
+router = APIRouter(prefix="/project-showcase", tags=["Project Showcase"])
 
 s3 = boto3.client(
     "s3",

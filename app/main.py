@@ -86,7 +86,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     lifespan=lifespan,
-    title="ireallycode API",
+    title="RYZE.ai API",
     description="API for ireallycode platform",
     version="1.0.0",
     docs_url="/docs",

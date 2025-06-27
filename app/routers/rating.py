@@ -32,7 +32,7 @@ import logging
 
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/project-showcase", tags=["project-showcase"])
+router = APIRouter(prefix="/project-showcase", tags=["Projet Showcase"])
 
 
 @router.post("/", response_model=ProjectShowcase)
